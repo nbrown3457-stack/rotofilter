@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   
   // This must match the login file exactly
   // Uses the variable we set in .env.local (localhost) or Vercel (rotofilter.com)
-const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback`;
+const REDIRECT_URI = 'https://www.rotofilter.com/api/auth/callback';
 
   if (!code) {
     return NextResponse.json({ error: "No code returned from Yahoo" }, { status: 400 });

@@ -5,7 +5,7 @@ export async function GET() {
   
   // This must match EXACTLY what is in your Yahoo Developer Portal
   // Uses the variable we set in .env.local (localhost) or Vercel (rotofilter.com)
-const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback`; 
+const REDIRECT_URI = 'https://www.rotofilter.com/api/auth/callback';
 
   // "fspt-r" gives you Read-Only access to their fantasy leagues
   const scope = "fspt-r"; 
