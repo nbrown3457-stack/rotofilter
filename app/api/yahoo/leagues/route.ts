@@ -22,59 +22,59 @@ export async function GET() {
     );
     const teamsData: any = await teamsResponse.json();
 
+    // 1. RECURSIVE SEARCH: Find the first team_key in the entire JSON
     let teamKey: string | null = null;
     
-    // Safety check for the root path
-    const games = teamsData?.fantasy_content?.users?.[0]?.user?.[1]?.games;
-    if (!games) {
-      return NextResponse.json({ error: "No MLB games found", raw: teamsData });
-    }
-
-    // Convert games object to a safe array and look for a team key
-    const gamesArray = Object.values(games).filter((g: any) => g && typeof g === 'object' && g.game);
-    
-    for (const gameObj of (gamesArray as any[])) {
-        const leagues = gameObj.leagues;
-        if (!leagues) continue;
-
-        const leaguesArray = Object.values(leagues).filter((l: any) => l && typeof l === 'object');
-        for (const leagueObj of (leaguesArray as any[])) {
-            if (!leagueObj.teams) continue;
-            
-            const teamsArray = Object.values(leagueObj.teams).filter((t: any) => t && typeof t === 'object' && t.team);
-            if (teamsArray.length > 0) {
-                const teamData = (teamsArray[0] as any).team[0];
-                const keyEntry = teamData.find((item: any) => item.team_key);
-                if (keyEntry) {
-                    teamKey = keyEntry.team_key;
-                    break;
-                }
-            }
+    const findTeamKey = (obj: any): string | null => {
+        if (!obj || typeof obj !== 'object') return null;
+        if (obj.team_key) return obj.team_key;
+        
+        for (const value of Object.values(obj)) {
+            const result = findTeamKey(value);
+            if (result) return result;
         }
-        if (teamKey) break;
+        return null;
+    };
+
+    teamKey = findTeamKey(teamsData);
+
+    if (!teamKey) {
+        return NextResponse.json({ error: "No team key found in Yahoo data", debug: teamsData });
     }
 
-    if (!teamKey) return NextResponse.json({ error: "Active team not found" });
-
-    // Fetch the actual Roster
+    // 2. Fetch the Roster
     const rosterResponse = await fetch(
         `https://fantasysports.yahooapis.com/fantasy/v2/team/${teamKey}/roster?format=json`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     const rosterData: any = await rosterResponse.json();
     
-    const players = rosterData.fantasy_content?.team?.[1]?.roster?.[0]?.players;
-    if (!players) return NextResponse.json({ error: "Roster unavailable" });
+    // 3. Flatten the Player Data
+    const players: any[] = [];
+    const findPlayers = (obj: any) => {
+        if (!obj || typeof obj !== 'object') return;
+        if (obj.player) {
+            players.push(obj.player);
+            return;
+        }
+        for (const value of Object.values(obj)) {
+            findPlayers(value);
+        }
+    };
+
+    findPlayers(rosterData);
+
+    if (players.length === 0) {
+        return NextResponse.json({ error: "No players found on roster", debug: rosterData });
+    }
 
     const roster = [];
     const yahooIds: string[] = [];
-    const playersArray = Object.values(players).filter((p: any) => p && typeof p === 'object' && p.player);
 
-    for (const pObj of (playersArray as any[])) {
-        const meta = pObj.player[0];
-        // Scan the metadata array for specific fields
-        const idObj = meta.find((item: any) => item.player_id);
-        const nameObj = meta.find((item: any) => item.name);
+    for (const playerMeta of players) {
+        const metaArray = playerMeta[0];
+        const idObj = metaArray.find((item: any) => item.player_id);
+        const nameObj = metaArray.find((item: any) => item.name);
         
         if (idObj) {
             yahooIds.push(idObj.player_id);
@@ -86,7 +86,7 @@ export async function GET() {
         }
     }
 
-    // Match Yahoo IDs to MLB IDs using your Supabase Rosetta Stone
+    // 4. Batch lookup in your Supabase Rosetta Stone
     const { data: mappings } = await supabase
         .from('player_mappings')
         .select('yahoo_id, mlb_id')
@@ -97,7 +97,11 @@ export async function GET() {
         mlb_id: mappings?.find(m => m.yahoo_id === player.yahoo_id)?.mlb_id || null
     }));
 
-    return NextResponse.json({ success: true, team_key: teamKey, roster: finalRoster });
+    return NextResponse.json({ 
+        success: true, 
+        team_found: teamKey, 
+        roster: finalRoster 
+    });
 
   } catch (error) {
     return NextResponse.json({ error: "Sync failed", details: String(error) }, { status: 500 });
