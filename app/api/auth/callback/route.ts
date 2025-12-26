@@ -23,9 +23,10 @@ const REDIRECT_URI = 'https://www.rotofilter.com/api/auth/callback';
           `${YAHOO_CLIENT_ID}:${YAHOO_CLIENT_SECRET}`
         ).toString("base64")}`,
       },
-      body: new URLSearchParams({
+    body: new URLSearchParams({
         grant_type: "authorization_code",
-        redirect_uri: REDIRECT_URI,
+        // HARDCODED: No variables allowed!
+        redirect_uri: "https://www.rotofilter.com/api/auth/callback",
         code: code,
       }),
     });
