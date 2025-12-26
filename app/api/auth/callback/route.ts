@@ -33,8 +33,13 @@ const REDIRECT_URI = 'https://www.rotofilter.com/api/auth/callback';
     const tokens = await tokenResponse.json();
 
     if (tokens.error) {
-      return NextResponse.json({ error: tokens.error_description }, { status: 400 });
-    }
+   // DEBUG: Show me exactly what URI we sent!
+   return NextResponse.json({ 
+     error: tokens.error_description, 
+     debug_sent_uri: REDIRECT_URI, // <--- This is the spy
+     debug_client_id: YAHOO_CLIENT_ID 
+   }, { status: 400 });
+}
 
     // 2. SUCCESS! We have the token.
     // Redirect the user back to your site's "League Sync" page.
