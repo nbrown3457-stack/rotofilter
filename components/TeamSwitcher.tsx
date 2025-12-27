@@ -1,55 +1,79 @@
-'use client';
-import { useTeam } from '@/context/TeamContext';
+"use client";
+
+import { useState, useEffect } from "react";
+import { createClient } from "@/app/utils/supabase/client";
+import { Icons } from "./Icons"; // Ensure this path is correct for your setup
 
 export default function TeamSwitcher() {
-  const { teams, activeTeam, setActiveTeam, loading } = useTeam();
-
-  // Handle the loading state gracefully so the UI doesn't jump
-  if (loading) {
-    return (
-      <div className="flex flex-col animate-pulse">
-        <div className="h-2 w-16 bg-gray-200 rounded mb-2"></div>
-        <div className="h-9 w-48 bg-gray-100 rounded-lg"></div>
-      </div>
-    );
-  }
-
-  // If for some reason the Yahoo sync failed or returned no teams
-  if (!teams || teams.length === 0) return null;
-
+  const [isOpen, setIsOpen] = useState(false);
+  
+  // FORCE VISIBLE: No "if (!mounted) return null" checks here!
+  
   return (
-    <div className="flex flex-col min-w-[200px]">
-      <label 
-        htmlFor="team-select" 
-        className="text-[10px] uppercase font-bold text-gray-400 mb-1 ml-1 tracking-wider"
+    <div style={{ position: "relative", zIndex: 200 }}>
+      {/* THE BUTTON - Hardcoded to be White text on Green so you CANNOT miss it */}
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          background: "#1b5e20", 
+          color: "white", 
+          border: "1px solid #4caf50", 
+          padding: "8px 16px", 
+          borderRadius: "8px",
+          fontWeight: "bold",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px"
+        }}
       >
-        Active Team & League
-      </label>
-      
-      <div className="relative">
-        <select
-          id="team-select"
-          value={activeTeam?.team_key || ''}
-          onChange={(e) => {
-            const team = teams.find(t => t.team_key === e.target.value);
-            if (team) setActiveTeam(team);
-          }}
-          className="block w-full bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 p-2.5 pr-10 appearance-none cursor-pointer shadow-sm hover:border-gray-300 transition-colors"
-        >
-          {teams.map((team) => (
-            <option key={team.team_key} value={team.team_key}>
-              {team.team_name} — {team.seasonYear === 458 ? '2025' : team.seasonYear}
-            </option>
-          ))}
-        </select>
-        
-        {/* Custom Chevron Arrow for that "Pro" look */}
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
-          <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
-            <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-          </svg>
+        <span>⚾ Sync League</span>
+        <span>▼</span>
+      </button>
+
+      {/* THE DROPDOWN MENU */}
+      {isOpen && (
+        <div style={{
+          position: "absolute",
+          top: "110%",
+          right: 0,
+          background: "white",
+          border: "1px solid #ccc",
+          borderRadius: "8px",
+          width: "220px",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+          padding: "8px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "4px"
+        }}>
+          <div style={{ padding: "8px", fontSize: "12px", color: "#666", borderBottom: "1px solid #eee" }}>
+            Select a Yahoo League:
+          </div>
+          
+          <button 
+             onClick={() => {
+               // This triggers the sync modal by URL parameter
+               const url = new URL(window.location.href);
+               url.searchParams.set('sync', 'true'); // This opens your existing modal
+               window.history.pushState({}, '', url);
+               window.location.reload(); // Quick way to force the modal open
+             }}
+             style={{
+               background: "#f0f7ff",
+               color: "#007bff",
+               border: "1px dashed #007bff",
+               padding: "10px",
+               borderRadius: "6px",
+               cursor: "pointer",
+               fontWeight: "bold",
+               textAlign: "center"
+             }}
+          >
+            + Add New League
+          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }
