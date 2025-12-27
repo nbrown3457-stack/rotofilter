@@ -7,16 +7,18 @@ import { cookies } from 'next/headers';
 // --------------------------------------------------------------------------
 const DEFAULT_YEAR = '2025'; 
 const SEASON_END_DATE = '2025-09-29'; 
-const MAPPING_TABLE = 'player_mappings'; // <--- UPDATED TO MATCH YOUR SCREENSHOT
+const MAPPING_TABLE = 'player_mappings'; 
 
-// Initialize Supabase Client
+// --- ARCHITECTURE FIX: Use the Public Anon Key ---
+// We can use this because we Disabled RLS on the mapping table.
+// This is much safer than managing a second secret key.
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! 
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! 
 );
 
 // --------------------------------------------------------------------------
-// HELPER: FETCH SAVANT DATA (Unchanged)
+// HELPER: FETCH SAVANT DATA
 // --------------------------------------------------------------------------
 async function fetchSavantData(type: 'batter' | 'pitcher' | 'sprint' | 'fielding' | 'movement', year: string) {
   let url = "";
@@ -72,7 +74,7 @@ async function fetchSavantData(type: 'batter' | 'pitcher' | 'sprint' | 'fielding
 }
 
 // --------------------------------------------------------------------------
-// HELPER: DATE CALCULATOR (Unchanged)
+// HELPER: DATE CALCULATOR
 // --------------------------------------------------------------------------
 function getDateRange(range: string, customStart?: string | null, customEnd?: string | null) {
   if (range === 'custom' && customStart && customEnd) return { start: customStart, end: customEnd };
@@ -111,7 +113,7 @@ export async function GET(request: NextRequest) {
     const customEnd = searchParams.get('end');
     const filterTeamId = searchParams.get('team_id'); 
 
-    // GET LEAGUE CONTEXT FROM COOKIES
+    // GET LEAGUE CONTEXT
     const cookieStore = await cookies();
     const activeLeagueKey = cookieStore.get('active_league_key')?.value;
     const activeTeamKey = cookieStore.get('active_team_key')?.value;
@@ -125,13 +127,13 @@ export async function GET(request: NextRequest) {
       targetYear = (parseInt(DEFAULT_YEAR) - 1).toString();
     }
 
-    // 1. SETUP URLS
     const sportIds = "1";
     let statsParams = dates 
       ? `stats=byDateRange&startDate=${dates.start}&endDate=${dates.end}&group=hitting,pitching&sportId=${sportIds}&limit=3000`
       : `stats=season&season=${targetYear}&group=hitting,pitching&sportId=${sportIds}&limit=3000`;
 
-    // 2. PARALLEL FETCH (Includes Supabase Roster + MAPPING TABLE)
+    // 2. PARALLEL FETCH 
+    // Now that RLS is disabled on player_mappings, the Anon Key will work here.
     const [
       rosterData, 
       allStats, 
@@ -140,8 +142,8 @@ export async function GET(request: NextRequest) {
       savantSprint, 
       savantFielding, 
       savantMovement,
-      leagueOwnership, // The Yahoo Rosters
-      idMappings       // <--- THE ROSETTA STONE
+      leagueOwnership, 
+      idMappings       
     ] = await Promise.all([
       fetchJson(`https://statsapi.mlb.com/api/v1/sports/1/players?season=${targetYear}&gameType=R`),
       fetchJson(`https://statsapi.mlb.com/api/v1/stats?${statsParams}`),
@@ -150,48 +152,37 @@ export async function GET(request: NextRequest) {
       fetchSavantData('sprint', targetYear),
       fetchSavantData('fielding', targetYear),
       fetchSavantData('movement', targetYear),
+      // Fetch Rosters
       activeLeagueKey 
         ? supabase.from('league_rosters').select('yahoo_id, team_key').eq('league_key', activeLeagueKey) 
         : Promise.resolve({ data: [] }),
+      // Fetch Mappings (This was the point of failure due to RLS)
       supabase.from(MAPPING_TABLE).select('yahoo_id, mlb_id') 
     ]);
 
-    // --- BUILD THE BRIDGE (Yahoo ID -> MLB ID) ---
+    // --- MAPPING LOGIC ---
     const yahooToMlb = new Map<string, number>();
     if (idMappings.data) {
-       idMappings.data.forEach((row: any) => {
-          if (row.yahoo_id && row.mlb_id) {
-             // FIX: Force mlb_id to be a number so it matches the API types
-             const mlbNum = parseInt(row.mlb_id);
-             if (!isNaN(mlbNum)) {
-                yahooToMlb.set(row.yahoo_id.toString(), mlbNum);
-             }
-          }
-       });
+        idMappings.data.forEach((row: any) => {
+            if (row.yahoo_id && row.mlb_id) {
+                const mlbNum = parseInt(row.mlb_id);
+                if (!isNaN(mlbNum)) yahooToMlb.set(row.yahoo_id.toString(), mlbNum);
+            }
+        });
     }
 
-    // --- BUILD OWNERSHIP MAP (MLB ID -> Team Key) ---
     const ownershipMap = new Map<number, string>(); 
-    
     if (leagueOwnership.data) {
-       leagueOwnership.data.forEach((r: any) => {
-         // 1. Get the Yahoo ID from the roster
-         const yId = r.yahoo_id.toString();
-         
-         // 2. Translate it to an MLB ID using the Rosetta Stone
-         const mId = yahooToMlb.get(yId);
-         
-         // 3. If translation successful, mark ownership on the MLB ID
-         if (mId) {
-            ownershipMap.set(mId, r.team_key);
-         }
-       });
+        leagueOwnership.data.forEach((r: any) => {
+            const yId = r.yahoo_id.toString();
+            const mId = yahooToMlb.get(yId);
+            if (mId) ownershipMap.set(mId, r.team_key);
+        });
     }
 
     // 3. BUILD MASTER MAP
     const masterMap = new Map();
 
-    // A. Add Roster Players
     if (rosterData && rosterData.people) {
       rosterData.people.forEach((p: any) => {
         masterMap.set(p.id, {
@@ -208,7 +199,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // B. Merge in Stats
     if (allStats && allStats.stats) {
       allStats.stats.forEach((group: any) => {
         const type = group.group.displayName === 'pitching' ? 'pitcher' : 'batter';
@@ -232,7 +222,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 4. FINAL MERGE & LEAGUE FILTERING
+    // 4. FINAL MERGE
     let players = Array.from(masterMap.values()).map((p: any) => {
       const mlbInfo = p.mlbInfo || rosterData?.people?.find((r: any) => r.id === p.id);
       const isPitcher = p.type === 'pitcher';
@@ -247,10 +237,7 @@ export async function GET(request: NextRequest) {
       const calculatedCSW = (safeAdv.called_strike_pct || 0) + (safeAdv.whiff_pct || 0); 
       const wrcProxy = safeAdv.woba ? Math.round(((safeAdv.woba / 0.315) * 100)) : 100;
 
-      // --- DETERMINE AVAILABILITY (Using the Translation Map) ---
-      // We look up the MLB ID directly in our translated ownership map
       let ownerTeamKey = ownershipMap.get(p.id); 
-      
       let availability = 'AVAILABLE';
       if (ownerTeamKey) {
         availability = (ownerTeamKey === activeTeamKey) ? 'MY_TEAM' : 'ROSTERED';
@@ -304,7 +291,6 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // 5. SERVER-SIDE FILTER: "MY TEAM"
     if (filterTeamId) {
        players = players.filter((p: any) => p.ownerTeamKey === filterTeamId);
     }
