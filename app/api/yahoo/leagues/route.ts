@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
+// Initialize Supabase with Service Role for batch lookups
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY! 
@@ -16,59 +17,68 @@ export async function GET() {
   }
 
   try {
-    // 1. Fetch all baseball history
+    // 1. Fetch all historical MLB games for the user
     const teamsResponse = await fetch(
       'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_codes=mlb/teams?format=json', 
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     const teamsData: any = await teamsResponse.json();
 
-    let teamKey: string | null = null;
-    
-    // 2. Identify Games and Sort by Season Descending (2026, 2025, 2024...)
     const games = teamsData?.fantasy_content?.users?.[0]?.user?.[1]?.games;
-    if (!games) return NextResponse.json({ error: "No games found" });
+    if (!games) return NextResponse.json({ error: "No MLB games found" });
 
+    // 2. Sort games by season descending (2026, 2025, 2024...)
     const sortedGames = Object.values(games)
       .filter((g: any) => g && typeof g === 'object' && g.game)
       .sort((a: any, b: any) => parseInt(b.game[0].season) - parseInt(a.game[0].season));
 
-    // 3. Recursive Helper to find the first team_key in the newest season that has a roster
-    const findTeamKey = (obj: any): string | null => {
-        if (!obj || typeof obj !== 'object') return null;
-        if (obj.team_key) return obj.team_key;
-        for (const value of Object.values(obj)) {
-            const result = findTeamKey(value);
-            if (result) return result;
-        }
-        return null;
-    };
+    let teamKey: string | null = null;
+    let finalRosterData: any = null;
 
-    // Check each season (newest first) for an active team
+    // 3. THE SMART LOOP: Find the newest season that isn't empty
     for (const gameObj of (sortedGames as any[])) {
-        // Skip games that have an empty teams array (like 2026 right now)
-        if (gameObj.teams && Object.keys(gameObj.teams).length > 0) {
-            teamKey = findTeamKey(gameObj);
-            if (teamKey) break; 
+        // Find a team key in this game
+        const findKey = (obj: any): string | null => {
+            if (!obj || typeof obj !== 'object') return null;
+            if (obj.team_key) return obj.team_key;
+            for (const val of Object.values(obj)) {
+                const res = findKey(val);
+                if (res) return res;
+            }
+            return null;
+        };
+
+        const currentKey = findKey(gameObj);
+        
+        if (currentKey) {
+            // Check if this specific team has players (skips empty offseason rosters)
+            const rosterRes = await fetch(
+                `https://fantasysports.yahooapis.com/fantasy/v2/team/${currentKey}/roster?format=json`,
+                { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            const rosterJson = await rosterRes.json();
+            
+            // Check for player_id in the stringified JSON as a quick existence check
+            if (JSON.stringify(rosterJson).includes('"player_id"')) {
+                teamKey = currentKey;
+                finalRosterData = rosterJson;
+                break; // Found the active roster! Stop here.
+            }
         }
     }
 
-    if (!teamKey) return NextResponse.json({ error: "No active roster found in history" });
+    if (!teamKey || !finalRosterData) {
+        return NextResponse.json({ error: "No active roster with players found." });
+    }
 
-    // 4. Fetch the Roster and Map IDs
-    const rosterResponse = await fetch(
-        `https://fantasysports.yahooapis.com/fantasy/v2/team/${teamKey}/roster?format=json`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    const rosterData: any = await rosterResponse.json();
-    
+    // 4. Flatten the Player Data
     const players: any[] = [];
     const findPlayers = (obj: any) => {
         if (!obj || typeof obj !== 'object') return;
         if (obj.player) { players.push(obj.player); return; }
         for (const value of Object.values(obj)) { findPlayers(value); }
     };
-    findPlayers(rosterData);
+    findPlayers(finalRosterData);
 
     const roster = [];
     const yahooIds: string[] = [];
@@ -88,7 +98,7 @@ export async function GET() {
         }
     }
 
-    // 5. Connect to Supabase "Rosetta Stone"
+    // 5. Supabase Batch Lookup (The Rosetta Stone)
     const { data: mappings } = await supabase
         .from('player_mappings')
         .select('yahoo_id, mlb_id')
@@ -99,7 +109,12 @@ export async function GET() {
         mlb_id: mappings?.find(m => m.yahoo_id === player.yahoo_id)?.mlb_id || null
     }));
 
-    return NextResponse.json({ success: true, team_key: teamKey, roster: finalRoster });
+    return NextResponse.json({ 
+        success: true, 
+        season_found: teamKey.split('.')[0], // Debug info (e.g. 458 for 2025)
+        team_key: teamKey, 
+        roster: finalRoster 
+    });
 
   } catch (error) {
     return NextResponse.json({ error: "Sync failed", details: String(error) }, { status: 500 });
