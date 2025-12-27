@@ -12,8 +12,7 @@ import { PlayerNewsFeed } from "../components/PlayerNewsFeed";
 import LeagueSyncModal from "../components/LeagueSyncModal"; 
 import { Icons } from "../components/Icons"; 
 import { UserMenu } from "../components/UserMenu"; 
-// ADD TeamSwitcher to your imports
-import TeamSwitcher from "../components/TeamSwitcher";
+import TeamSwitcher from "../components/TeamSwitcher"; // NEW: League Integration
 
 // 2. GO UP ONE LEVEL (..) to find config
 import type { CoreId } from "../config/cores";
@@ -21,7 +20,6 @@ import { CORES } from "../config/cores";
 import { CORE_STATS } from "../config/corestats";
 import { STATS } from "../config/stats";
 import type { StatKey } from "../config/stats";
-
 
 // 3. LOOK INSIDE CURRENT FOLDER (.) to find utils
 import { 
@@ -169,7 +167,7 @@ const CardHeader = ({ title, onClear, onToggle, isCollapsed, isActive }: any) =>
   </div>
 );
 
-const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline }: any) => {
+const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline, availability }: any) => {
   const teamColor = TEAM_PRIMARY[team as TeamAbbr] || "#444";
   return (
     <div style={{ position: 'relative', flexShrink: 0 }} title={headline}>
@@ -178,6 +176,10 @@ const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline }: any) => {
         <span style={{ color: "#fff", fontSize: "14px", fontWeight: 900, fontFamily: "ui-monospace, monospace", position: 'relative', zIndex: 2, textShadow: "1px 1px 2px rgba(0,0,0,0.4)" }}>{jerseyNumber || "--"}</span>
       </div>
       {hasNews && <div className="news-pulse" />}
+      {/* NEW: Visual ownership indicator (green dot) */}
+      {availability === 'MY_TEAM' && (
+        <div style={{ position: 'absolute', top: -2, left: -2, width: 10, height: 10, background: '#4caf50', borderRadius: '50%', border: '2px solid white', zIndex: 10 }} />
+      )}
       <div style={{ position: 'absolute', bottom: -2, right: -4, background: '#fff', color: teamColor, fontSize: '8px', fontWeight: 900, padding: '1px 3px', borderRadius: '4px', border: `1px solid ${teamColor}`, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', zIndex: 5 }}>{team}</div>
     </div>
   );
@@ -214,17 +216,14 @@ export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   const resultsTableRef = useRef<HTMLDivElement>(null);
   const [sections, setSections] = useState({ league: true, positions: true, al: true, nl: true });
-   
+    
   // --- LEAGUE SYNC & ROSTER STATE ---
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [syncedTeams, setSyncedTeams] = useState<string[]>([]);
   const [userTeams, setUserTeams] = useState<any[]>([]);
   const [activeTeam, setActiveTeam] = useState<any>(null);
   const [isLeagueMenuOpen, setIsLeagueMenuOpen] = useState(false);
-  
-  // 🔥 NEW: Store the list of player names on the selected team
-  const [rosterNames, setRosterNames] = useState<string[]>([]);
-
+   
   // --- FILTER STATES ---
   const [selectedPositions, setSelectedPositions] = useState<Position[]>([]);
   const [selectedStatKeys, setSelectedStatKeys] = useState<StatKey[]>([]);
@@ -324,38 +323,6 @@ export default function Home() {
     fetchUserTeams();
   }, [user]);
 
-// 🔥 NEW: Fetch Roster Players whenever the Active Team changes
-  useEffect(() => {
-    async function fetchRoster() {
-      if (!activeTeam) {
-        setRosterNames([]); // Clear roster if no team selected
-        return;
-      }
-      
-      console.log("🔍 Checking Supabase for team:", activeTeam.external_team_id); // LOG 1
-
-      // Fetch names from the table we created in Step 1
-      const { data, error } = await supabase
-        .from('rostered_players')
-        .select('player_name')
-        .eq('external_team_id', activeTeam.external_team_id);
-
-      if (error) {
-          console.error("❌ Supabase Error:", error); // LOG 2
-      }
-
-      if (!error && data) {
-        console.log("✅ Found Players:", data); // LOG 3
-        // Create a simple array of names ["Aaron Judge", "Shohei Ohtani", ...]
-        const names = data.map(r => r.player_name);
-        setRosterNames(names);
-      }
-    }
-
-    fetchRoster();
-  }, [activeTeam]); // Re-run when user selects a different team
-
-
   useEffect(() => {
     setIsMounted(true);
     const saved = localStorage.getItem('rotofilter_presets');
@@ -389,6 +356,7 @@ export default function Home() {
   }, [user]);
   // ----------------------------------------
 
+  // --- SAFE FETCH: WRAPPED IN TRY/CATCH TO PREVENT CRASHING ---
   const fetchPlayers = useCallback(async () => {
     setLoading(true);
     try {
@@ -396,8 +364,14 @@ export default function Home() {
       if (dateRange === 'custom') {
         query += `&start=${customStart}&end=${customEnd}`;
       }
+      
       const res = await fetch(query);
-      if (!res.ok) throw new Error("API Failed");
+      if (!res.ok) {
+        console.warn("API Failed - likely missing DB column. Loading empty list.");
+        setPlayers([]); 
+        return; 
+      }
+      
       const data = await res.json();
       
       if (Array.isArray(data)) {
@@ -407,10 +381,10 @@ export default function Home() {
         setPlayers([]); 
       }
     } catch (err) {
-      console.error("Failed to load players", err);
-      setPlayers([]);
+      console.error("Failed to load players - using fallback:", err);
+      setPlayers([]); // This prevents the infinite spinner loop!
     } finally {
-      setLoading(false);
+      setLoading(false); // ALWAYS turn off loading
     }
   }, [dateRange, customStart, customEnd]);
 
@@ -521,40 +495,21 @@ export default function Home() {
     else { setSortKey(key); setSortDir("desc"); }
   };
 
+  // 🔥 UPDATED FILTERING LOGIC: Uses availability data from the backend API
   const filteredPlayers = useMemo(() => {
-    // 1. Create a "Set" of your players for fast lookup
-    // We make them lowercase to ensure "Aaron Judge" matches "aaron judge"
-    const myRosterSet = new Set(rosterNames.map(n => n.toLowerCase()));
+    const scoredData = players.map((p: any) => enrichPlayerData(p, dateRange));
 
-    // 2. Process every player and tag them if they are on your team
-    const scoredData = players.map((p: any) => {
-      let status = "AVAILABLE"; // Default to available
-
-      // If this player's name is in your roster list, change status to MY_TEAM
-      if (myRosterSet.has(p.name.toLowerCase())) {
-        status = "MY_TEAM";
-      }
-
-      // Add the scores (RotoScore, etc) and the new status to the player
-      const enriched = enrichPlayerData(p, dateRange);
-      return { ...enriched, availability: status };
-    });
-
-    // 3. Now run the filters on this new "tagged" data
     return scoredData.filter((p: any) => {
-      
-      // Filter by League Status (My Team vs Available)
+      // League Status filters now use the 'availability' property returned by the API
       if (leagueStatus === "available" && p.availability !== "AVAILABLE") return false;
       if (leagueStatus === "rostered" && p.availability !== "MY_TEAM") return false;
 
-      // Standard Filters (Position, Team, etc)
       if (selectedPositions.length > 0 && !selectedPositions.includes(p.position as Position)) return false;
       if (level !== "all" && p.level !== level) return false;
       if (!selectedTeams.includes(p.team as TeamAbbr)) return false;
       if (searchQuery && !p.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       if (minTools > 0 && getTools(p).length < minTools) return false;
       
-      // Stat Thresholds
       for (const key of selectedStatKeys) {
         const threshold = statThresholds[key];
         const val = parseFloat(p.stats?.[key] || 0); 
@@ -565,13 +520,13 @@ export default function Home() {
       }
       return true;
     }).sort((a: any, b: any) => {
-      // Sort logic
       if (!sortKey) return 0;
       const valA = sortKey.includes('Score') ? a[sortKey] : parseFloat(a.stats[sortKey] || 0);
       const valB = sortKey.includes('Score') ? b[sortKey] : parseFloat(b.stats[sortKey] || 0);
       return sortDir === "asc" ? valA - valB : valB - valA;
     });
-  }, [players, rosterNames, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange]);
+  }, [players, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange]);
+
   const toggleStat = (key: StatKey) => {
     if (selectedStatKeys.includes(key)) setSelectedStatKeys(prev => prev.filter(k => k !== key));
     else { setSelectedStatKeys(prev => [...prev, key]); if (statThresholds[key] === undefined) setStatThresholds(prev => ({ ...prev, [key]: STATS[key].defaultValue })); }
@@ -623,7 +578,7 @@ export default function Home() {
           <div style={{ overflow: "auto", padding: "20px" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr><th style={{ textAlign: "left", padding: 10 }}>Stat</th>{comparePlayers.map(p => (<th key={p.id} style={{ textAlign: "center", padding: 10 }}><div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>{p.id.toString() === topChoiceId && <div style={{ background: "#FFD700", color: "#000", fontSize: 10, fontWeight: 900, padding: "2px 8px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4, marginBottom: -4 }}><Icons.Trophy /> TOP CHOICE</div>}<PlayerAvatar team={p.team as TeamAbbr} jerseyNumber={p.jerseyNumber} /><span style={{ fontSize: 12, fontWeight: 800 }}>{p.name}</span></div></th>))}</tr>
+                <tr><th style={{ textAlign: "left", padding: 10 }}>Stat</th>{comparePlayers.map(p => (<th key={p.id} style={{ textAlign: "center", padding: 10 }}><div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>{p.id.toString() === topChoiceId && <div style={{ background: "#FFD700", color: "#000", fontSize: 10, fontWeight: 900, padding: "2px 8px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4, marginBottom: -4 }}><Icons.Trophy /> TOP CHOICE</div>}<PlayerAvatar team={p.team as TeamAbbr} jerseyNumber={p.jerseyNumber} availability={p.availability} /><span style={{ fontSize: 12, fontWeight: 800 }}>{p.name}</span></div></th>))}</tr>
               </thead>
               <tbody>
                 <tr style={{ background: "#f5f5f5" }}><td colSpan={comparePlayers.length + 1} style={{ padding: "8px 10px", fontWeight: 800, fontSize: 11, color: "#666" }}>STANDARD</td></tr>
@@ -671,17 +626,18 @@ export default function Home() {
       <div className="beta-banner">BETA • v1.2 • Dec 2025</div>
       {renderCompareModal()}
       
-      {/* TOP NAV */}
+      {/* TOP NAV: Integrated Switcher & NO CONDITIONAL LOCKS */}
       <nav style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(20, 20, 20, 0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
         <div style={{ maxWidth: 1600, margin: '0 auto', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
             <div onClick={handleGlobalReset} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '24px' }}>⚾</span>
-             <div style={{ display: 'flex', flexDirection: 'column' }}>
-  <span className="nav-logo-text" style={{ fontWeight: 900, fontSize: '20px', color: '#fff', letterSpacing: '-0.5px', lineHeight: '1' }}>ROTO<span style={{ color: '#4caf50' }}>FILTER</span></span>
-  <span className="nav-logo-subtext" style={{ fontSize: '10px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', lineHeight: '1' }}>Data Driving Dominance</span>
-</div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span className="nav-logo-text" style={{ fontWeight: 900, fontSize: '20px', color: '#fff', letterSpacing: '-0.5px', lineHeight: '1' }}>ROTO<span style={{ color: '#4caf50' }}>FILTER</span></span>
+                <span className="nav-logo-subtext" style={{ fontSize: '10px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', lineHeight: '1' }}>Data Driving Dominance</span>
+              </div>
             </div>
+            {/* NEW: Integrated Navigation Menu */}
             <div className="desktop-nav-links" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               <a href="#" className="nav-link active">Filters</a>
               <a href="#" className="nav-link">Rosters</a>
@@ -689,40 +645,16 @@ export default function Home() {
               <a href="#" className="nav-link">Prospects</a>
               <a href="#" className="nav-link">Community</a>
               
-              {/* --- RESTORED LEAGUE DROPDOWN & SYNC --- */}
+              {/* --- NATIVE LEAGUE SWITCHER --- */}
               <div style={{ marginLeft: '12px', paddingLeft: '12px', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
-                {userTeams.length > 0 ? (
-                  <TeamSwitcher 
-                    teams={userTeams}
-                    currentTeam={activeTeam}
-                    onTeamSelect={(team: any) => setActiveTeam(team)}
-                    onSyncClick={() => setIsSyncModalOpen(true)} 
-                  />
-                ) : (
-                  <button 
-                    onClick={() => setIsSyncModalOpen(true)}
-                    className="nav-link"
-                    style={{ 
-                      background: "rgba(255,255,255,0.1)", 
-                      display: "flex", 
-                      alignItems: "center", 
-                      gap: "6px",
-                      cursor: "pointer"
-                    }}
-                  >
-                    <Icons.Sync /> Sync League
-                  </button>
-                )}
+                <TeamSwitcher /> 
               </div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-             {/* 1. The Upgrade Button (Same as before) */}
              <button className="upgrade-btn" style={{ ...baseButtonStyle, background: isUserPaid ? 'rgba(255,255,255,0.1)' : '#fff', color: isUserPaid ? '#fff' : '#000', border: 'none', padding: '6px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 700 }}>
-  {isUserPaid ? '✔ Pro' : 'Upgrade'}
-</button>
-
-             {/* 2. REPLACED: NEW AUTH COMPONENT */}
+               {isUserPaid ? '✔ Pro' : 'Upgrade'}
+             </button>
              <UserMenu />
           </div>
         </div>
@@ -747,7 +679,8 @@ export default function Home() {
         ))}
       </div>
 
-      <main style={{ padding: "clamp(12px, 3vw, 24px)", maxWidth: 1600, margin: "0 auto", fontFamily: "system-ui", flex: "1 0 auto", width: "100%" }}>
+      {/* MAIN CONTAINER FIXED FOR WHITE BORDER ISSUE */}
+      <main style={{ padding: "clamp(12px, 3vw, 24px)", maxWidth: 1600, margin: "0 auto", fontFamily: "system-ui", flex: "1 0 auto", width: "100%", display: "flex", flexDirection: "column" }}>
         
         {/* PRESET TABS */}
         <div style={{ marginBottom: 24, marginTop: 24 }}>
@@ -790,11 +723,10 @@ export default function Home() {
             {sections.league && (
               <>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {/* CUSTOM LABELS FOR CLARITY */}
                   {[
                     { key: "all", label: "All" },
-                    { key: "rostered", label: "My Team" }, // Was "Rostered"
-                    { key: "available", label: "Rest of MLB" } // Was "Available"
+                    { key: "rostered", label: "My Team" }, 
+                    { key: "available", label: "Rest of MLB" } 
                   ].map((opt) => { 
                     const isLocked = !isUserPaid && opt.key !== "all"; 
                     return (
@@ -974,9 +906,9 @@ export default function Home() {
                         </th>
                       ))}
                       <th onClick={() => handleSort('dynaScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_DYNASTY_PURPLE }}>Dynasty</th>
-<th onClick={() => handleSort('rotoScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_DARK_GREEN }}>Roto</th>
-<th onClick={() => handleSort('pointsScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: "#0288d1" }}>Points</th> {/* NEW */}
-<th onClick={() => handleSort('rangeScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_RANGE_ORANGE }}>Range</th>
+                      <th onClick={() => handleSort('rotoScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_DARK_GREEN }}>Roto</th>
+                      <th onClick={() => handleSort('pointsScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: "#0288d1" }}>Points</th> 
+                      <th onClick={() => handleSort('rangeScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_RANGE_ORANGE }}>Range</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1005,12 +937,14 @@ export default function Home() {
                                 team={p.team as TeamAbbr} 
                                 jerseyNumber={p.jerseyNumber} 
                                 hasNews={isExpanded} 
+                                availability={p.availability} // Backend ownership data
                               />
                               <div>
                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                   <span style={{ fontWeight: 700, fontSize: 14 }}>{p.name}</span>
+                                  <span style={{ fontSize: 9, fontWeight: 800, color: "#666", background: "#eee", padding: "1px 4px", borderRadius: 3 }}>{p.position}</span>
                                   
-                                  {/* NEW: Availability Badges */}
+                                  {/* Visual availability status badges */}
                                   {p.availability === 'MY_TEAM' && (
                                     <span style={{ fontSize: 9, fontWeight: 900, color: "#fff", background: "#4caf50", padding: "1px 6px", borderRadius: 10 }}>OWNED</span>
                                   )}
@@ -1018,7 +952,6 @@ export default function Home() {
                                     <span style={{ fontSize: 9, fontWeight: 900, color: "#888", border: "1px solid #888", padding: "1px 6px", borderRadius: 10 }}>TAKEN</span>
                                   )}
 
-                                  <span style={{ fontSize: 9, fontWeight: 800, color: "#666", background: "#eee", padding: "1px 4px", borderRadius: 3 }}>{p.position}</span>
                                   {getTrajectory(p) && <span style={{ fontSize: 9, fontWeight: 800, color: getTrajectory(p)!.color, background: getTrajectory(p)!.bg, padding: "1px 4px", borderRadius: 4 }}>{getTrajectory(p)!.label}</span>}
                                 </div>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: "#555", marginTop: 2, fontFamily: "system-ui", display: "flex", gap: "6px", alignItems: "center" }}>
@@ -1044,10 +977,10 @@ export default function Home() {
                               }
                               return <td key={k} style={{ textAlign: "right", padding: "8px 12px", fontWeight: 700 }}>{p.stats?.[k] ?? "-"}</td>
                             })}
-<td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: BUTTON_DYNASTY_PURPLE }}>{p.dynaScore}</td>
-<td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: BUTTON_DARK_GREEN }}>{p.rotoScore}</td>
-<td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: "#0288d1" }}>{p.pointsScore}</td> {/* NEW */}
-<td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: BUTTON_RANGE_ORANGE }}>{p.rangeScore}</td>
+                            <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: BUTTON_DYNASTY_PURPLE }}>{p.dynaScore}</td>
+                            <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: BUTTON_DARK_GREEN }}>{p.rotoScore}</td>
+                            <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: "#0288d1" }}>{p.pointsScore}</td> 
+                            <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: BUTTON_RANGE_ORANGE }}>{p.rangeScore}</td>
                           </tr>
 
                           {/* EXPANDABLE NEWS THREAD SECTION */}
@@ -1055,7 +988,6 @@ export default function Home() {
                             <tr>
                               <td colSpan={12} style={{ padding: "10px", background: "#f8faff" }}>
                                 <div style={{ background: "white", padding: "24px", borderRadius: 12, border: "1px solid #d0e3ff", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.05)" }}>
-                                  {/* Explicitly passing playerName ensuring it is available to the component */}
                                   <PlayerNewsFeed mlbId={p.id} playerName={p.name} />
                                 </div>
                               </td>
@@ -1094,7 +1026,5 @@ export default function Home() {
         />
       )}
     </div>
-
-    // Restoring stable
   )
 }
