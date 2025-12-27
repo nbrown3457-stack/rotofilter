@@ -9,28 +9,26 @@ const DEFAULT_YEAR = '2025';
 const SEASON_END_DATE = '2025-09-29'; 
 const MAPPING_TABLE = 'player_mappings'; 
 
-// --- ARCHITECTURE FIX: Use the Public Anon Key ---
-// We can use this because we Disabled RLS on the mapping table.
-// This is much safer than managing a second secret key.
+// Initialize Supabase (Using standard ANON key)
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! 
 );
 
 // --------------------------------------------------------------------------
-// HELPER: FETCH SAVANT DATA
+// HELPER: FETCH SAVANT DATA (Safe Mode)
 // --------------------------------------------------------------------------
 async function fetchSavantData(type: 'batter' | 'pitcher' | 'sprint' | 'fielding' | 'movement', year: string) {
-  let url = "";
-  if (type === 'sprint') url = `https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=${year}&position=&team=&min=1&csv=true`;
-  else if (type === 'fielding') url = `https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=Fielder&year=${year}&team=&min=1&csv=true`;
-  else if (type === 'movement') url = `https://baseballsavant.mlb.com/leaderboard/pitch-movement?year=${year}&team=&min=1&pitch_type=ALL&csv=true`;
-  else {
-    const metrics = ["xwoba", "xba", "xslg", "woba", "ba", "slg", "exit_velocity_avg", "launch_angle_avg", "sweet_spot_percent", "barrel_batted_rate", "hard_hit_percent", "whiff_percent", "swing_percent", "oz_swing_percent", "k_percent", "bb_percent", "iz_contact_percent", "called_strike_percent"].join(",");
-    url = `https://baseballsavant.mlb.com/leaderboard/custom?year=${year}&type=${type}&filter=&sort=1&sortDir=desc&min=1&selections=${metrics}&csv=true`;
-  }
-
   try {
+    let url = "";
+    if (type === 'sprint') url = `https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=${year}&position=&team=&min=1&csv=true`;
+    else if (type === 'fielding') url = `https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=Fielder&year=${year}&team=&min=1&csv=true`;
+    else if (type === 'movement') url = `https://baseballsavant.mlb.com/leaderboard/pitch-movement?year=${year}&team=&min=1&pitch_type=ALL&csv=true`;
+    else {
+      const metrics = ["xwoba", "xba", "xslg", "woba", "ba", "slg", "exit_velocity_avg", "launch_angle_avg", "sweet_spot_percent", "barrel_batted_rate", "hard_hit_percent", "whiff_percent", "swing_percent", "oz_swing_percent", "k_percent", "bb_percent", "iz_contact_percent", "called_strike_percent"].join(",");
+      url = `https://baseballsavant.mlb.com/leaderboard/custom?year=${year}&type=${type}&filter=&sort=1&sortDir=desc&min=1&selections=${metrics}&csv=true`;
+    }
+
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return new Map();
     const text = await res.text();
@@ -47,7 +45,7 @@ async function fetchSavantData(type: 'batter' | 'pitcher' | 'sprint' | 'fielding
       if (isNaN(id)) continue;
       
       const parseVal = (key: string) => parseFloat(row[idx[key]]) || 0;
-
+      // ... (parsing logic same as before) ...
       if (type === 'sprint') dataMap.set(id, { sprint_speed: parseVal('sprint_speed') });
       else if (type === 'fielding') dataMap.set(id, { oaa: parseVal('outs_above_average') });
       else if (type === 'movement') dataMap.set(id, { ivb: parseVal('pfx_z'), spin_rate: parseVal('avg_spin') });
@@ -70,7 +68,10 @@ async function fetchSavantData(type: 'batter' | 'pitcher' | 'sprint' | 'fielding
       }
     }
     return dataMap;
-  } catch (error) { return new Map(); }
+  } catch (error) { 
+    console.error(`Savant Error (${type}):`, error); 
+    return new Map(); 
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -106,6 +107,8 @@ const fetchJson = async (url: string) => {
 // MAIN API HANDLER
 // --------------------------------------------------------------------------
 export async function GET(request: NextRequest) {
+  console.log("API: Starting request..."); // Debug log
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const range = searchParams.get('range') || 'season_curr';
@@ -132,53 +135,58 @@ export async function GET(request: NextRequest) {
       ? `stats=byDateRange&startDate=${dates.start}&endDate=${dates.end}&group=hitting,pitching&sportId=${sportIds}&limit=3000`
       : `stats=season&season=${targetYear}&group=hitting,pitching&sportId=${sportIds}&limit=3000`;
 
-    // 2. PARALLEL FETCH 
-    // Now that RLS is disabled on player_mappings, the Anon Key will work here.
+    // --- PHASE 1: CRITICAL DATA (Master List) ---
+    // If this fails, we throw an error.
+    const rosterData = await fetchJson(`https://statsapi.mlb.com/api/v1/sports/1/players?season=${targetYear}&gameType=R`);
+    if (!rosterData) throw new Error("MLB API Unreachable");
+
+    // --- PHASE 2: ENRICHMENT DATA (Safe Parallel Fetch) ---
+    // If any of these fail, we catch them individually so the main list survives.
     const [
-      rosterData, 
       allStats, 
       savantBatters, 
       savantPitchers, 
       savantSprint, 
       savantFielding, 
       savantMovement,
-      leagueOwnership, 
-      idMappings       
+      leagueOwnershipRes, 
+      idMappingsRes       
     ] = await Promise.all([
-      fetchJson(`https://statsapi.mlb.com/api/v1/sports/1/players?season=${targetYear}&gameType=R`),
       fetchJson(`https://statsapi.mlb.com/api/v1/stats?${statsParams}`),
       fetchSavantData('batter', targetYear),
       fetchSavantData('pitcher', targetYear),
       fetchSavantData('sprint', targetYear),
       fetchSavantData('fielding', targetYear),
       fetchSavantData('movement', targetYear),
-      // Fetch Rosters
+      // Safe Supabase Calls
       activeLeagueKey 
-        ? supabase.from('league_rosters').select('yahoo_id, team_key').eq('league_key', activeLeagueKey) 
-        : Promise.resolve({ data: [] }),
-      // Fetch Mappings (This was the point of failure due to RLS)
-      supabase.from(MAPPING_TABLE).select('yahoo_id, mlb_id') 
+        ? supabase.from('league_rosters').select('yahoo_id, team_key').eq('league_key', activeLeagueKey).then(res => res)
+        : Promise.resolve({ data: [], error: null }), // <--- ADD error: null
+      supabase.from(MAPPING_TABLE).select('yahoo_id, mlb_id').then(res => res)
     ]);
+
+    // Check for Supabase Errors
+    if (idMappingsRes.error) console.error("Mapping Table Error:", idMappingsRes.error);
+    if (leagueOwnershipRes.error) console.error("Roster Table Error:", leagueOwnershipRes.error);
+
+    const leagueOwnership = leagueOwnershipRes.data || [];
+    const idMappings = idMappingsRes.data || [];
 
     // --- MAPPING LOGIC ---
     const yahooToMlb = new Map<string, number>();
-    if (idMappings.data) {
-        idMappings.data.forEach((row: any) => {
-            if (row.yahoo_id && row.mlb_id) {
-                const mlbNum = parseInt(row.mlb_id);
-                if (!isNaN(mlbNum)) yahooToMlb.set(row.yahoo_id.toString(), mlbNum);
-            }
-        });
-    }
+    idMappings.forEach((row: any) => {
+        if (row.yahoo_id && row.mlb_id) {
+            const mlbNum = parseInt(row.mlb_id);
+            if (!isNaN(mlbNum)) yahooToMlb.set(row.yahoo_id.toString(), mlbNum);
+        }
+    });
 
     const ownershipMap = new Map<number, string>(); 
-    if (leagueOwnership.data) {
-        leagueOwnership.data.forEach((r: any) => {
-            const yId = r.yahoo_id.toString();
-            const mId = yahooToMlb.get(yId);
-            if (mId) ownershipMap.set(mId, r.team_key);
-        });
-    }
+    leagueOwnership.forEach((r: any) => {
+        const yId = r.yahoo_id.toString();
+        const mId = yahooToMlb.get(yId);
+        if (mId) ownershipMap.set(mId, r.team_key);
+    });
 
     // 3. BUILD MASTER MAP
     const masterMap = new Map();
@@ -199,6 +207,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Merge Stats (Safety Check: ensure allStats exists)
     if (allStats && allStats.stats) {
       allStats.stats.forEach((group: any) => {
         const type = group.group.displayName === 'pitching' ? 'pitcher' : 'batter';
@@ -237,6 +246,7 @@ export async function GET(request: NextRequest) {
       const calculatedCSW = (safeAdv.called_strike_pct || 0) + (safeAdv.whiff_pct || 0); 
       const wrcProxy = safeAdv.woba ? Math.round(((safeAdv.woba / 0.315) * 100)) : 100;
 
+      // Map Ownership
       let ownerTeamKey = ownershipMap.get(p.id); 
       let availability = 'AVAILABLE';
       if (ownerTeamKey) {
@@ -298,8 +308,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(players);
 
   } catch (error: any) {
-    console.error("API Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("API CRITICAL FAILURE:", error);
+    return NextResponse.json({ error: error.message || "Unknown API Error" }, { status: 500 });
   }
 }
 
