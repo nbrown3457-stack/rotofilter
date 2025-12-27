@@ -223,6 +223,21 @@ export default function Home() {
   const [userTeams, setUserTeams] = useState<any[]>([]);
   const [activeTeam, setActiveTeam] = useState<any>(null);
   const [isLeagueMenuOpen, setIsLeagueMenuOpen] = useState(false);
+
+  // --- SYNC LISTENER: This makes the "Add New League" button work ---
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('sync') === 'true') {
+        setIsSyncModalOpen(true); // Forces the pop-up to open
+        
+        // Clean the URL so it doesn't pop up again on refresh
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete('sync');
+        window.history.replaceState({}, '', newUrl);
+      }
+    }
+  }, []);
    
   // --- FILTER STATES ---
   const [selectedPositions, setSelectedPositions] = useState<Position[]>([]);
@@ -389,7 +404,7 @@ export default function Home() {
 
   useEffect(() => {
     if (dateRange !== 'custom') {
-      // fetchPlayers();  <-- DISABLE THIS LINE
+      fetchPlayers(); 
       console.log("Data fetch disabled to unfreeze UI");
     }
   }, [dateRange, fetchPlayers]);
