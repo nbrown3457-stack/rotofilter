@@ -13,6 +13,7 @@ import LeagueSyncModal from "../components/LeagueSyncModal";
 import { Icons } from "../components/Icons"; 
 import { UserMenu } from "../components/UserMenu"; 
 import TeamSwitcher from "../components/TeamSwitcher"; // NEW: League Integration
+import { useTeam } from '../context/TeamContext';
 
 // 2. GO UP ONE LEVEL (..) to find config
 import type { CoreId } from "../config/cores";
@@ -202,6 +203,7 @@ const ToolLegend = () => (
 export default function Home() {
   const supabase = createClient();
 
+  // --- 1. STANDARD STATE ---
   const [players, setPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlayer, setSelectedPlayer] = useState<any | null>(null);
@@ -217,35 +219,19 @@ export default function Home() {
   const resultsTableRef = useRef<HTMLDivElement>(null);
   const [sections, setSections] = useState({ league: true, positions: true, al: true, nl: true });
     
-  // --- LEAGUE SYNC & ROSTER STATE ---
+  // --- 2. NEW TEAM CONTEXT & FILTER STATE ---
+  const { activeTeam } = useTeam(); // <--- CONNECTS TO THE BRAIN
+  const [leagueScope, setLeagueScope] = useState('all'); 
+  const [search, setSearch] = useState(''); 
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
-  const [syncedTeams, setSyncedTeams] = useState<string[]>([]);
-  const [userTeams, setUserTeams] = useState<any[]>([]);
-  const [activeTeam, setActiveTeam] = useState<any>(null);
-  const [isLeagueMenuOpen, setIsLeagueMenuOpen] = useState(false);
 
-  // --- SYNC LISTENER: This makes the "Add New League" button work ---
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('sync') === 'true') {
-        setIsSyncModalOpen(true); // Forces the pop-up to open
-        
-        // Clean the URL so it doesn't pop up again on refresh
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.delete('sync');
-        window.history.replaceState({}, '', newUrl);
-      }
-    }
-  }, []);
-   
-  // --- FILTER STATES ---
-  const [selectedPositions, setSelectedPositions] = useState<Position[]>([]);
+  // --- 3. FILTER SETTINGS ---
+  const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
   const [selectedStatKeys, setSelectedStatKeys] = useState<StatKey[]>([]);
   const [level, setLevel] = useState<Level>("all");
   const [leagueStatus, setLeagueStatus] = useState<LeagueStatus>("all");
   const [selectedTeams, setSelectedTeams] = useState<TeamAbbr[]>([...ALL_TEAMS]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(""); // (Note: We use 'search' for API, this might be redundant but safe to keep for now)
   const [sortKey, setSortKey] = useState<string | null>("rotoScore"); 
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [statThresholds, setStatThresholds] = useState<Record<string, number>>({});
@@ -254,61 +240,61 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("filters");
   const [presetTab, setPresetTab] = useState<FilterTab>("recommended");
   const [savedFilters, setSavedFilters] = useState<any[]>([]);
-
-  // 1. User State
   const [user, setUser] = useState<any>(null);
 
-  // 2. Function to Fetch Filters from Cloud
+  // --- 4. SYNC LISTENER (Opens Modal on URL Param) ---
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('sync') === 'true') {
+        setIsSyncModalOpen(true); 
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete('sync');
+        window.history.replaceState({}, '', newUrl);
+      }
+    }
+  }, []);
+
+// --- 5. AUTH & FILTERS LOAD (Now with Logout Cleaner) ---
   const fetchSavedFilters = async (currentUser: any) => {
     if (!currentUser) return; 
-
-    const { data, error } = await supabase
-      .from('saved_filters')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching filters:', error);
-    } else if (data) {
-      const cloudFilters = data.map((f: any) => ({
-        id: f.id,
-        name: f.name,
-        ...f.config 
-      }));
+    const { data, error } = await supabase.from('saved_filters').select('*').order('created_at', { ascending: false });
+    if (data) {
+      const cloudFilters = data.map((f: any) => ({ id: f.id, name: f.name, ...f.config }));
       setSavedFilters(cloudFilters);
     }
   };
 
-  // 3. Listen for Login/Logout & Trigger Fetch
   useEffect(() => {
+    // Check initial session
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-      
-      // 🔥 NEW: Check for the "Pro" badge we just added in SQL
-      if (currentUser?.user_metadata?.is_paid) {
-        setIsUserPaid(true);
-      }
-
+      if (currentUser?.user_metadata?.is_paid) setIsUserPaid(true);
       if (currentUser) fetchSavedFilters(currentUser); 
     };
     checkUser();
 
+    // Listen for changes (Login / Logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       
-      // 🔥 NEW: Check on auth change too
-      if (currentUser?.user_metadata?.is_paid) {
-        setIsUserPaid(true);
-      } else {
-        setIsUserPaid(false);
-      }
+      // Handle Paid Status
+      if (currentUser?.user_metadata?.is_paid) setIsUserPaid(true);
+      else setIsUserPaid(false);
       
+      // Handle Data Load vs. Cleanup
       if (currentUser) {
         fetchSavedFilters(currentUser); 
       } else {
+        // --- LOGOUT DETECTED: WIPE THE MEMORY ---
+        // This forces the "Viewing: Team" to reset to default
+        document.cookie = "active_team_key=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+        document.cookie = "active_league_key=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+        
+        // Restore local defaults
         const saved = localStorage.getItem('rotofilter_presets');
         if (saved) setSavedFilters(JSON.parse(saved));
         else setSavedFilters([]);
@@ -318,24 +304,20 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // NEW: Fetch User Teams (Full Data)
+  // --- 6. HANDLE SYNC SUCCESS (Simplified) ---
   useEffect(() => {
-    async function fetchUserTeams() {
-      if (!user) return;
-      
-      const { data, error } = await supabase
-        .from('user_teams')
-        .select('*'); 
+    const params = new URLSearchParams(window.location.search);
+    const syncStatus = params.get('sync');
+    const errorMsg = params.get('msg');
 
-      if (!error && data) {
-        setUserTeams(data);
-        if (data.length > 0 && !activeTeam) {
-           setActiveTeam(data[0]);
-        }
-      }
+    if (syncStatus === 'success') {
+      setIsSyncModalOpen(true);
+      window.history.replaceState({}, '', window.location.pathname);
+      // Note: We don't need to manually fetch teams here anymore; Context handles it on reload.
+    } else if (syncStatus === 'error') {
+      alert(`Yahoo Connection Failed: ${decodeURIComponent(errorMsg || "Unknown error")}`);
+      window.history.replaceState({}, '', window.location.pathname);
     }
-
-    fetchUserTeams();
   }, [user]);
 
   useEffect(() => {
@@ -343,82 +325,68 @@ export default function Home() {
     const saved = localStorage.getItem('rotofilter_presets');
     if (saved) setSavedFilters(JSON.parse(saved));
   }, []);
-
-  // --- NEW: Handle Yahoo Sync Success ---
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const syncStatus = params.get('sync');
-    const teamsFound = params.get('teams');
-    const errorMsg = params.get('msg');
-
-    if (syncStatus === 'success') {
-      if (teamsFound) {
-        setSyncedTeams(decodeURIComponent(teamsFound).split(', '));
-      }
-      setIsSyncModalOpen(true);
-      window.history.replaceState({}, '', window.location.pathname);
-      
-      if (user) {
-         supabase.from('user_teams').select('*').then(({ data }) => {
-            if (data) setUserTeams(data);
-         });
-      }
-
-    } else if (syncStatus === 'error') {
-      alert(`Yahoo Connection Failed: ${decodeURIComponent(errorMsg || "Unknown error")}`);
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, [user]);
   // ----------------------------------------
 
-  // --- SAFE FETCH: WRAPPED IN TRY/CATCH TO PREVENT CRASHING ---
+  // --- UPDATED FETCH PLAYERS (With My Team Filter & Safety Timeout) ---
   const fetchPlayers = useCallback(async () => {
     setLoading(true);
-    
-    // 1. Create a timeout so it never spins forever
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("Request timed out")), 5000)
-    );
-
     try {
-      let query = `/api/players?range=${dateRange === 'pace_season' ? 'season_curr' : dateRange}`;
-      if (dateRange === 'custom') {
-        query += `&start=${customStart}&end=${customEnd}`;
+      const params = new URLSearchParams();
+
+      // 1. Handle "My Team" Filtering
+      // This connects your new Sync Button to the table
+      if (leagueScope === 'my_team') {
+        if (activeTeam) {
+           params.append('team_id', activeTeam.team_key);
+        } else {
+           console.log("User selected My Team but no active team found.");
+        }
+      }
+
+      // 2. Handle Search
+      if (search) params.append('search', search);
+
+      // 3. Handle Date Ranges 
+      if (dateRange !== 'custom') {
+         const rangeValue = dateRange === 'pace_season' ? 'season_curr' : dateRange;
+         params.append('range', rangeValue);
+      } else {
+         if (customStart) params.append('start_date', customStart);
+         if (customEnd) params.append('end_date', customEnd);
       }
       
-      // 2. Race the API against the 5-second timer
-      const res: any = await Promise.race([fetch(query), timeoutPromise]);
+      // 4. Handle Positions
+      if (selectedPositions.length > 0 && !selectedPositions.includes('All')) {
+        params.append('position', selectedPositions.join(','));
+      }
       
-      if (!res.ok) throw new Error("API Failed");
+      // 5. The Fetch (with a built-in 8-second safety timeout)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       
-      const data = await res.json();
-      setPlayers(Array.isArray(data) ? data : []);
+      const response = await fetch(`/api/players?${params.toString()}`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) throw new Error('Failed to fetch players');
       
-    } catch (err) {
-      console.error("Load failed (using empty list):", err);
-      setPlayers([]); // Force empty list so UI appears
+      const data = await response.json();
+      setPlayers(Array.isArray(data.players) ? data.players : []); 
+      
+    } catch (error) {
+      console.error('Error fetching players:', error);
+      setPlayers([]);
     } finally {
-      setLoading(false); // KILL THE SPINNER
+      setLoading(false);
     }
-  }, [dateRange, customStart, customEnd]);
+  }, [leagueScope, activeTeam, search, dateRange, customStart, customEnd, selectedPositions]); 
 
+  // --- TRIGGER FETCH ON FILTER CHANGE ---
   useEffect(() => {
-    if (dateRange !== 'custom') {
-      fetchPlayers(); 
-      console.log("Data fetch disabled to unfreeze UI");
+    // Only fetch if we aren't partially through selecting custom dates
+    if (dateRange !== 'custom' || (customStart && customEnd)) {
+      fetchPlayers();
     }
-  }, [dateRange, fetchPlayers]);
-
-// --- WATCHDOG FIX: Force spinner off after 3 seconds ---
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (loading) {
-        console.warn("Watchdog: Force killing spinner");
-        setLoading(false);
-      }
-    }, 3000); 
-    return () => clearTimeout(timer);
-  }, [loading]);
+  }, [fetchPlayers, dateRange, customStart, customEnd]);
 
 
   const applyCustomDates = () => {

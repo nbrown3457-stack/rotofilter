@@ -7,11 +7,12 @@ import { cookies } from 'next/headers';
 // --------------------------------------------------------------------------
 const DEFAULT_YEAR = '2025'; 
 const SEASON_END_DATE = '2025-09-29'; 
+const MAPPING_TABLE = 'player_mappings'; // <--- UPDATED TO MATCH YOUR SCREENSHOT
 
 // Initialize Supabase Client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // Use Service Role for backend bypass
+  process.env.SUPABASE_SERVICE_ROLE_KEY! 
 );
 
 // --------------------------------------------------------------------------
@@ -108,6 +109,7 @@ export async function GET(request: NextRequest) {
     const range = searchParams.get('range') || 'season_curr';
     const customStart = searchParams.get('start');
     const customEnd = searchParams.get('end');
+    const filterTeamId = searchParams.get('team_id'); 
 
     // GET LEAGUE CONTEXT FROM COOKIES
     const cookieStore = await cookies();
@@ -129,7 +131,7 @@ export async function GET(request: NextRequest) {
       ? `stats=byDateRange&startDate=${dates.start}&endDate=${dates.end}&group=hitting,pitching&sportId=${sportIds}&limit=3000`
       : `stats=season&season=${targetYear}&group=hitting,pitching&sportId=${sportIds}&limit=3000`;
 
-    // 2. PARALLEL FETCH (Includes Supabase Ownership Check)
+    // 2. PARALLEL FETCH (Includes Supabase Roster + MAPPING TABLE)
     const [
       rosterData, 
       allStats, 
@@ -138,7 +140,8 @@ export async function GET(request: NextRequest) {
       savantSprint, 
       savantFielding, 
       savantMovement,
-      leagueOwnership // Our new Supabase data
+      leagueOwnership, // The Yahoo Rosters
+      idMappings       // <--- THE ROSETTA STONE
     ] = await Promise.all([
       fetchJson(`https://statsapi.mlb.com/api/v1/sports/1/players?season=${targetYear}&gameType=R`),
       fetchJson(`https://statsapi.mlb.com/api/v1/stats?${statsParams}`),
@@ -147,14 +150,43 @@ export async function GET(request: NextRequest) {
       fetchSavantData('sprint', targetYear),
       fetchSavantData('fielding', targetYear),
       fetchSavantData('movement', targetYear),
-      activeLeagueKey ? supabase.from('league_rosters').select('yahoo_id, team_key').eq('league_key', activeLeagueKey) : Promise.resolve({ data: [] })
+      activeLeagueKey 
+        ? supabase.from('league_rosters').select('yahoo_id, team_key').eq('league_key', activeLeagueKey) 
+        : Promise.resolve({ data: [] }),
+      supabase.from(MAPPING_TABLE).select('yahoo_id, mlb_id') 
     ]);
 
-    // Build Ownership Map for O(1) Lookup
-    const ownershipMap = new Map();
-    leagueOwnership.data?.forEach((r: any) => {
-      ownershipMap.set(r.yahoo_id.toString(), r.team_key);
-    });
+    // --- BUILD THE BRIDGE (Yahoo ID -> MLB ID) ---
+    const yahooToMlb = new Map<string, number>();
+    if (idMappings.data) {
+       idMappings.data.forEach((row: any) => {
+          if (row.yahoo_id && row.mlb_id) {
+             // FIX: Force mlb_id to be a number so it matches the API types
+             const mlbNum = parseInt(row.mlb_id);
+             if (!isNaN(mlbNum)) {
+                yahooToMlb.set(row.yahoo_id.toString(), mlbNum);
+             }
+          }
+       });
+    }
+
+    // --- BUILD OWNERSHIP MAP (MLB ID -> Team Key) ---
+    const ownershipMap = new Map<number, string>(); 
+    
+    if (leagueOwnership.data) {
+       leagueOwnership.data.forEach((r: any) => {
+         // 1. Get the Yahoo ID from the roster
+         const yId = r.yahoo_id.toString();
+         
+         // 2. Translate it to an MLB ID using the Rosetta Stone
+         const mId = yahooToMlb.get(yId);
+         
+         // 3. If translation successful, mark ownership on the MLB ID
+         if (mId) {
+            ownershipMap.set(mId, r.team_key);
+         }
+       });
+    }
 
     // 3. BUILD MASTER MAP
     const masterMap = new Map();
@@ -168,7 +200,7 @@ export async function GET(request: NextRequest) {
           team: mapTeamIdToAbbr(p.currentTeam?.id),
           position: p.primaryPosition?.abbreviation || "DH",
           level: 'mlb',
-          isRosteredInMLB: true, // Renamed to distinguish from Yahoo rostered
+          isRosteredInMLB: true, 
           mlbInfo: p,
           stats: {}, 
           type: p.primaryPosition?.code === '1' ? 'pitcher' : 'batter'
@@ -201,7 +233,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. FINAL MERGE & LEAGUE FILTERING
-    const players = Array.from(masterMap.values()).map((p: any) => {
+    let players = Array.from(masterMap.values()).map((p: any) => {
       const mlbInfo = p.mlbInfo || rosterData?.people?.find((r: any) => r.id === p.id);
       const isPitcher = p.type === 'pitcher';
       const advStats = isPitcher ? savantPitchers.get(p.id) : savantBatters.get(p.id);
@@ -215,23 +247,19 @@ export async function GET(request: NextRequest) {
       const calculatedCSW = (safeAdv.called_strike_pct || 0) + (safeAdv.whiff_pct || 0); 
       const wrcProxy = safeAdv.woba ? Math.round(((safeAdv.woba / 0.315) * 100)) : 100;
 
-      // Determine League Availability
-      // Note: This assumes MLB ID matches your Yahoo Sync ID. 
-      // If they differ, you'll need to use your 'player_mappings' table here.
-      const ownerTeamKey = ownershipMap.get(p.id.toString());
+      // --- DETERMINE AVAILABILITY (Using the Translation Map) ---
+      // We look up the MLB ID directly in our translated ownership map
+      let ownerTeamKey = ownershipMap.get(p.id); 
+      
       let availability = 'AVAILABLE';
       if (ownerTeamKey) {
         availability = (ownerTeamKey === activeTeamKey) ? 'MY_TEAM' : 'ROSTERED';
       }
 
       return {
-        id: p.id,
-        name: p.name,
-        team: p.team,
-        position: p.position,
-        level: p.level,
-        availability, // 'AVAILABLE' | 'MY_TEAM' | 'ROSTERED'
-        isRosteredInMLB: p.isRosteredInMLB,
+        ...p, 
+        availability, 
+        ownerTeamKey, 
         jerseyNumber: mlbInfo?.primaryNumber || "--",
         info: {
           age: mlbInfo?.currentAge || 0,
@@ -275,6 +303,11 @@ export async function GET(request: NextRequest) {
         }
       };
     });
+
+    // 5. SERVER-SIDE FILTER: "MY TEAM"
+    if (filterTeamId) {
+       players = players.filter((p: any) => p.ownerTeamKey === filterTeamId);
+    }
 
     return NextResponse.json(players);
 
