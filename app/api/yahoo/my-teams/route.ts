@@ -10,54 +10,55 @@ export async function GET() {
   }
 
   try {
-    // 1. Fetch ALL MLB teams for the logged-in user
     const response = await fetch(
       'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_codes=mlb/teams?format=json',
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     const data = await response.json();
 
-    // 2. The "Cleaner" Logic: Recursively find all team objects in the messy Yahoo JSON
-    const myTeams: any[] = [];
+    // Map to store the "Newest" team found for each unique league
+    const leagueMap: Record<string, any> = {};
     
     const findTeams = (obj: any) => {
       if (!obj || typeof obj !== 'object') return;
-      
-      // If we found a team object, extract the key data
-      if (obj.team_key && obj.name) {
-        // A team_key looks like "458.l.12345.t.1"
-        // The league_key is the first two parts: "458.l.12345"
+
+      if (obj.team_key && obj.name && typeof obj.name === 'string') {
         const parts = obj.team_key.split('.');
+        const seasonYear = parseInt(parts[0]);
+        // The league unique identifier is usually the second and third parts: "l.12345"
+        const leagueId = `${parts[1]}.${parts[2]}`; 
         const leagueKey = `${parts[0]}.${parts[1]}.${parts[2]}`;
-        
-        myTeams.push({
-          team_key: obj.team_key,
-          team_name: obj.name,
-          league_key: leagueKey,
-          // Yahoo often puts league name in a separate part of the JSON, 
-          // but we can at least identify the team name for the dropdown.
-        });
-        return;
+
+        // If we haven't seen this league yet, OR this team is from a newer season than the one we stored
+        if (!leagueMap[leagueId] || seasonYear > leagueMap[leagueId].seasonYear) {
+          leagueMap[leagueId] = {
+            team_key: obj.team_key,
+            team_name: obj.name,
+            league_key: leagueKey,
+            seasonYear: seasonYear,
+            // We can add the league name here if we find it in the recursion
+          };
+        }
       }
-      
-      // Keep digging deeper
-      for (const value of Object.values(obj)) {
+
+      const values = Array.isArray(obj) ? obj : Object.values(obj);
+      for (const value of values) {
         findTeams(value);
       }
     };
 
     findTeams(data);
 
-    // 3. Return the clean list for your dropdown
+    // Convert our map back into a clean array for the dropdown
+    const finalTeams = Object.values(leagueMap).sort((a, b) => b.seasonYear - a.seasonYear);
+
     return NextResponse.json({ 
       success: true, 
-      teams: myTeams 
+      count: finalTeams.length,
+      teams: finalTeams 
     });
 
   } catch (error) {
-    return NextResponse.json({ 
-      error: "Failed to fetch teams", 
-      details: String(error) 
-    }, { status: 500 });
+    return NextResponse.json({ error: "Sync failed", details: String(error) }, { status: 500 });
   }
 }
