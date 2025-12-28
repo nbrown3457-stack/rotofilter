@@ -116,19 +116,20 @@ export async function GET(request: NextRequest) {
     const range = searchParams.get('range') || 'season_curr';
     const customStart = searchParams.get('start');
     const customEnd = searchParams.get('end');
-    const filterTeamId = searchParams.get('team_id'); 
+    
+    // CONTEXT PARAMS (The new inputs from your frontend)
+    const contextLeagueId = searchParams.get('league_id'); 
+    const contextTeamId = searchParams.get('team_id');     
 
-    // GET LEAGUE CONTEXT
+    // GET COOKIES (Fallback)
     const cookieStore = await cookies();
-    const activeLeagueKey = cookieStore.get('active_league_key')?.value;
-    const activeTeamKey = cookieStore.get('active_team_key')?.value;
+    const cookieLeagueKey = cookieStore.get('active_league_key')?.value;
+    const cookieTeamKey = cookieStore.get('active_team_key')?.value;
 
-    // --- PATCH: Derive League Key if Cookie Missing ---
-    let derivedLeagueKey = activeLeagueKey;
-    if (!derivedLeagueKey && filterTeamId && filterTeamId.includes('.t.')) {
-        // Extract league key from team key (e.g. "428.l.12345.t.1" -> "428.l.12345")
-        derivedLeagueKey = filterTeamId.split('.t.')[0];
-    }
+    // DECIDE WHICH KEYS TO USE (Explicit Params > Cookies)
+    // We strictly prefer the params sent by the frontend now
+    const activeLeagueKey = contextLeagueId || cookieLeagueKey;
+    const activeTeamKey = contextTeamId || cookieTeamKey;
 
     let targetYear = DEFAULT_YEAR;
     const dates = getDateRange(range, customStart, customEnd);
@@ -165,9 +166,9 @@ export async function GET(request: NextRequest) {
       fetchSavantData('sprint', targetYear),
       fetchSavantData('fielding', targetYear),
       fetchSavantData('movement', targetYear),
-      // Use derivedLeagueKey here so it works even if cookies are empty
-      (supabase && derivedLeagueKey)
-        ? supabase.from('league_rosters').select('yahoo_id, team_key').eq('league_key', derivedLeagueKey).then(res => res)
+      // FETCH OWNERSHIP IF LEAGUE KEY EXISTS
+      (supabase && activeLeagueKey)
+        ? supabase.from('league_rosters').select('yahoo_id, team_key').eq('league_key', activeLeagueKey).then(res => res)
         : Promise.resolve({ data: [], error: null }),
       supabase
         ? supabase.from(MAPPING_TABLE).select('yahoo_id, mlb_id').then(res => res)
@@ -177,7 +178,7 @@ export async function GET(request: NextRequest) {
     const leagueOwnership = leagueOwnershipRes?.data || [];
     const idMappings = idMappingsRes?.data || [];
 
-    // --- MAPPING LOGIC (Uses Your Table) ---
+    // --- MAPPING LOGIC ---
     const yahooToMlb = new Map<string, number>();
     if (idMappings.length > 0) {
         idMappings.forEach((row: any) => {
@@ -261,17 +262,22 @@ export async function GET(request: NextRequest) {
       const calculatedCSW = (safeAdv.called_strike_pct || 0) + (safeAdv.whiff_pct || 0); 
       const wrcProxy = safeAdv.woba ? Math.round(((safeAdv.woba / 0.315) * 100)) : 100;
 
+      // --- NEW OWNERSHIP LOGIC ---
       let ownerTeamKey = ownershipMap.get(p.id); 
       let availability = 'AVAILABLE';
+      
       if (ownerTeamKey) {
-        // Use derived 'My Team' logic (checks cookie OR current filter)
-        const myTeam = activeTeamKey || filterTeamId;
-        availability = (myTeam && ownerTeamKey === myTeam) ? 'MY_TEAM' : 'ROSTERED';
+        // If the player has an owner in the DB, check if it's the active team
+        if (activeTeamKey && ownerTeamKey === activeTeamKey) {
+            availability = 'MY_TEAM';
+        } else {
+            availability = 'ROSTERED';
+        }
       }
 
       return {
         ...p, 
-        availability, 
+        availability, // 'AVAILABLE' | 'MY_TEAM' | 'ROSTERED'
         ownerTeamKey, 
         jerseyNumber: mlbInfo?.primaryNumber || "--",
         info: {
@@ -317,9 +323,9 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    if (filterTeamId) {
-       players = players.filter((p: any) => p.ownerTeamKey === filterTeamId);
-    }
+    // NOTE: We REMOVED the final filter here.
+    // We return ALL players to the frontend, but now they have correct 'availability' tags.
+    // The frontend filters them using 'leagueScope'.
 
     return NextResponse.json(players);
 
