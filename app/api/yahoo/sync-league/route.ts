@@ -33,38 +33,37 @@ export async function POST(req: Request) {
     const data = await response.json();
     const rosteredPlayers: any[] = [];
 
-    // 2. Parse Teams (Preserving Ownership)
-    // Yahoo's JSON structure is messy. We drill down carefully.
-    const teamsData = data?.fantasy_content?.league?.[1]?.teams;
+    // 2. ROBUST PARSING STRATEGY
+    // We drill down into the weird Yahoo structure safely
+    const leagueData = data?.fantasy_content?.league;
+    // Yahoo puts the teams list in the second element of the league array usually [metadata, teams]
+    const teamsData = Array.isArray(leagueData) ? leagueData[1]?.teams : leagueData?.teams;
 
     if (teamsData && typeof teamsData === 'object') {
-      // Yahoo returns teams as an object with indices {0: team, 1: team, ... count: X}
       Object.values(teamsData).forEach((t: any) => {
-        // Skip the 'count' property
+        // Yahoo "Team" object is usually an array: [ {metadata}, {roster} ]
         if (!t?.team) return;
 
-        // The 'team' array usually has 2 parts: [0] is metadata, [1] is roster
-        const teamMetadata = t.team[0]; 
-        const teamRoster = t.team[1]?.roster;
-        
-        // Extract the Owner ID (team_key)
+        // 1. Get the Team Key (Who owns these players?)
+        const teamMetadata = Array.isArray(t.team) ? t.team[0] : null;
         const teamKey = teamMetadata?.find((m: any) => m.team_key !== undefined)?.team_key;
         
-        if (teamKey && teamRoster && teamRoster['0']?.players) {
-            const playersList = teamRoster['0'].players;
-            
-            // Loop through players on THIS team
+        // 2. Get the Player List
+        const rosterContainer = Array.isArray(t.team) ? t.team[1] : null;
+        const playersList = rosterContainer?.roster?.['0']?.players;
+
+        if (teamKey && playersList) {
             Object.values(playersList).forEach((pWrapper: any) => {
                 const p = pWrapper?.player;
-                if (p && p[0]) {
-                    // Drill for ID and Name
+                if (p && Array.isArray(p)) {
+                    // Extract IDs
                     const playerId = p[0].find((x: any) => x.player_id !== undefined)?.player_id;
                     const playerName = p[0].find((x: any) => x.name !== undefined)?.name?.full;
 
-                    if (playerId) {
+                    if (playerId && teamKey) {
                         rosteredPlayers.push({
                             league_key: league_key,
-                            team_key: teamKey, // <--- CRITICAL: Now we know who owns him
+                            team_key: teamKey, 
                             yahoo_id: playerId,
                             player_name: playerName || "Unknown",
                             updated_at: new Date()
@@ -76,41 +75,42 @@ export async function POST(req: Request) {
       });
     }
 
-    console.log(`SYNC: Found ${rosteredPlayers.length} players. Writing to DB...`);
+    console.log(`SYNC: Found ${rosteredPlayers.length} rostered players.`);
 
-    // 3. Update Supabase (The part that was commented out)
-    
-    // A. Clear old data for this league (to handle drops/adds)
-    const { error: deleteError } = await supabase
-        .from('league_rosters')
-        .delete()
-        .eq('league_key', league_key);
-    
-    if (deleteError) {
-        console.error("SYNC DB ERROR (Delete):", deleteError);
-        throw new Error("Failed to clear old rosters");
-    }
-
-    // B. Insert new data (in batches of 100 to be safe)
+    // 3. WRITE TO SUPABASE (The Critical Step)
     if (rosteredPlayers.length > 0) {
+        // A. Delete old data for this league to avoid duplicates
+        const { error: deleteError } = await supabase
+            .from('league_rosters')
+            .delete()
+            .eq('league_key', league_key);
+        
+        if (deleteError) {
+             console.error("SYNC DB DELETE ERROR:", deleteError);
+             // We continue anyway, hoping the insert works
+        }
+
+        // B. Insert new data
         const { error: insertError } = await supabase
             .from('league_rosters')
             .insert(rosteredPlayers);
             
         if (insertError) {
-            console.error("SYNC DB ERROR (Insert):", insertError);
-            throw new Error("Failed to save new rosters");
+            console.error("SYNC DB INSERT ERROR:", insertError);
+            throw new Error(`Database Write Failed: ${insertError.message}`);
         }
+    } else {
+        console.warn("SYNC: Parsing resulted in 0 players. Yahoo structure might have changed.");
     }
 
     return NextResponse.json({ 
       success: true, 
       count: rosteredPlayers.length,
-      message: `Successfully synced ${rosteredPlayers.length} players`
+      message: `Saved ${rosteredPlayers.length} players to database`
     });
 
   } catch (error: any) {
     console.error("SYNC CRITICAL FAILURE:", error);
-    return NextResponse.json({ error: error.message || "Sync failed" }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

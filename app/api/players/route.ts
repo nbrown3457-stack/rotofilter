@@ -14,10 +14,10 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = (supabaseUrl && supabaseKey) 
   ? createClient(supabaseUrl, supabaseKey) 
-  : null; // If keys are missing, we just don't use Supabase
+  : null; 
 
 // --------------------------------------------------------------------------
-// HELPER: FETCH SAVANT DATA (Safe Mode)
+// HELPER: FETCH SAVANT DATA
 // --------------------------------------------------------------------------
 async function fetchSavantData(type: 'batter' | 'pitcher' | 'sprint' | 'fielding' | 'movement', year: string) {
   try {
@@ -30,9 +30,8 @@ async function fetchSavantData(type: 'batter' | 'pitcher' | 'sprint' | 'fielding
       url = `https://baseballsavant.mlb.com/leaderboard/custom?year=${year}&type=${type}&filter=&sort=1&sortDir=desc&min=1&selections=${metrics}&csv=true`;
     }
 
-    // Add a timeout to Savant calls so they don't hang the server
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000); // 4 second timeout
+    const timeout = setTimeout(() => controller.abort(), 4000); 
 
     const res = await fetch(url, { cache: 'no-store', signal: controller.signal });
     clearTimeout(timeout);
@@ -75,7 +74,7 @@ async function fetchSavantData(type: 'batter' | 'pitcher' | 'sprint' | 'fielding
     }
     return dataMap;
   } catch (error) { 
-    return new Map(); // Fail silently on Savant errors
+    return new Map(); 
   }
 }
 
@@ -124,6 +123,13 @@ export async function GET(request: NextRequest) {
     const activeLeagueKey = cookieStore.get('active_league_key')?.value;
     const activeTeamKey = cookieStore.get('active_team_key')?.value;
 
+    // --- PATCH: Derive League Key if Cookie Missing ---
+    let derivedLeagueKey = activeLeagueKey;
+    if (!derivedLeagueKey && filterTeamId && filterTeamId.includes('.t.')) {
+        // Extract league key from team key (e.g. "428.l.12345.t.1" -> "428.l.12345")
+        derivedLeagueKey = filterTeamId.split('.t.')[0];
+    }
+
     let targetYear = DEFAULT_YEAR;
     const dates = getDateRange(range, customStart, customEnd);
     
@@ -138,7 +144,7 @@ export async function GET(request: NextRequest) {
       ? `stats=byDateRange&startDate=${dates.start}&endDate=${dates.end}&group=hitting,pitching&sportId=${sportIds}&limit=3000`
       : `stats=season&season=${targetYear}&group=hitting,pitching&sportId=${sportIds}&limit=3000`;
 
-    // --- PHASE 1: CRITICAL DATA (Master List) ---
+    // --- PHASE 1: CRITICAL DATA ---
     const rosterData = await fetchJson(`https://statsapi.mlb.com/api/v1/sports/1/players?season=${targetYear}&gameType=R`);
     if (!rosterData) throw new Error("MLB API Unreachable");
 
@@ -159,11 +165,10 @@ export async function GET(request: NextRequest) {
       fetchSavantData('sprint', targetYear),
       fetchSavantData('fielding', targetYear),
       fetchSavantData('movement', targetYear),
-      // Safe Supabase Calls (Only run if client exists and activeLeagueKey is present)
-      (supabase && activeLeagueKey)
-        ? supabase.from('league_rosters').select('yahoo_id, team_key').eq('league_key', activeLeagueKey).then(res => res)
+      // Use derivedLeagueKey here so it works even if cookies are empty
+      (supabase && derivedLeagueKey)
+        ? supabase.from('league_rosters').select('yahoo_id, team_key').eq('league_key', derivedLeagueKey).then(res => res)
         : Promise.resolve({ data: [], error: null }),
-      // Safe Mapping Call (Only run if client exists)
       supabase
         ? supabase.from(MAPPING_TABLE).select('yahoo_id, mlb_id').then(res => res)
         : Promise.resolve({ data: [], error: null })
@@ -172,7 +177,7 @@ export async function GET(request: NextRequest) {
     const leagueOwnership = leagueOwnershipRes?.data || [];
     const idMappings = idMappingsRes?.data || [];
 
-    // --- MAPPING LOGIC ---
+    // --- MAPPING LOGIC (Uses Your Table) ---
     const yahooToMlb = new Map<string, number>();
     if (idMappings.length > 0) {
         idMappings.forEach((row: any) => {
@@ -187,8 +192,15 @@ export async function GET(request: NextRequest) {
     if (leagueOwnership.length > 0) {
         leagueOwnership.forEach((r: any) => {
             const yId = r.yahoo_id.toString();
-            const mId = yahooToMlb.get(yId);
-            if (mId) ownershipMap.set(mId, r.team_key);
+            // Try explicit mapping first
+            let mId = yahooToMlb.get(yId);
+            
+            // If mapping fails, try using Yahoo ID as MLB ID (common for many players)
+            if (!mId) mId = parseInt(yId);
+
+            if (mId && !isNaN(mId)) {
+                ownershipMap.set(mId, r.team_key);
+            }
         });
     }
 
@@ -252,7 +264,9 @@ export async function GET(request: NextRequest) {
       let ownerTeamKey = ownershipMap.get(p.id); 
       let availability = 'AVAILABLE';
       if (ownerTeamKey) {
-        availability = (ownerTeamKey === activeTeamKey) ? 'MY_TEAM' : 'ROSTERED';
+        // Use derived 'My Team' logic (checks cookie OR current filter)
+        const myTeam = activeTeamKey || filterTeamId;
+        availability = (myTeam && ownerTeamKey === myTeam) ? 'MY_TEAM' : 'ROSTERED';
       }
 
       return {

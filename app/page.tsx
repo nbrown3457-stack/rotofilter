@@ -370,7 +370,9 @@ export default function Home() {
       if (!response.ok) throw new Error('Failed to fetch players');
       
       const data = await response.json();
-      setPlayers(Array.isArray(data.players) ? data.players : []); 
+      // "Handshake Fix": Check if data IS the array, or if it HAS a .players property
+      const safeList = Array.isArray(data) ? data : (data.players || []);
+      setPlayers(safeList); 
       
     } catch (error) {
       console.error('Error fetching players:', error);
