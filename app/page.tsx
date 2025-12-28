@@ -101,7 +101,8 @@ type BatterPos = "C" | "1B" | "2B" | "3B" | "SS" | "OF" | "DH";
 type PitcherPos = "SP" | "RP";
 type Position = BatterPos | PitcherPos | "batters" | "pitchers";
 type Level = "all" | "mlb" | "prospects";
-type LeagueStatus = "all" | "available" | "rostered";
+// Added "my_team" so we can distinguish between "My Guys" and "All Taken Players"
+type LeagueStatus = "all" | "available" | "rostered" | "my_team";
 type FilterTab = "recommended" | "expert" | "my_filters";
 type StatViewMode = "actual" | "pace";
 
@@ -333,14 +334,12 @@ export default function Home() {
     try {
       const params = new URLSearchParams();
 
-      // 1. Handle "My Team" Filtering
-      // This connects your new Sync Button to the table
-      if (leagueScope === 'my_team') {
-        if (activeTeam) {
-           params.append('team_id', activeTeam.team_key);
-        } else {
-           console.log("User selected My Team but no active team found.");
-        }
+      // 1. CONTEXT: Always send League & Team Key if they exist
+      // This allows the backend to tag players as 'MY_TEAM' vs 'ROSTERED' vs 'AVAILABLE'
+      // without filtering them out of the list immediately.
+      if (activeTeam) {
+          params.append('league_id', activeTeam.league_key);
+          params.append('team_id', activeTeam.team_key);
       }
 
       // 2. Handle Search
@@ -497,9 +496,21 @@ export default function Home() {
     const scoredData = players.map((p: any) => enrichPlayerData(p, dateRange));
 
     return scoredData.filter((p: any) => {
-      // League Status filters now use the 'availability' property returned by the API
-      if (leagueStatus === "available" && p.availability !== "AVAILABLE") return false;
-      if (leagueStatus === "rostered" && p.availability !== "MY_TEAM") return false;
+      // 1. LEAGUE STATUS FILTERS
+// "Available" = Not owned by anyone (Free Agents)
+if (leagueStatus === "available") {
+    if (p.availability !== "AVAILABLE") return false;
+}
+
+// "My Team" = Only players on YOUR roster
+if (leagueStatus === "my_team") {
+    if (p.availability !== "MY_TEAM") return false;
+}
+
+// "Rostered" = Players owned by YOU or OPPONENTS (Anyone taken)
+if (leagueStatus === "rostered") {
+    if (p.availability !== "MY_TEAM" && p.availability !== "ROSTERED") return false;
+}
 
       if (selectedPositions.length > 0 && !selectedPositions.includes(p.position as Position)) return false;
       if (level !== "all" && p.level !== level) return false;
@@ -737,39 +748,41 @@ export default function Home() {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 24 }}>
           <div style={{ ...compactCardStyle, flex: "1 1 200px" }}>
             <CardHeader title="League & Level" isCollapsed={!sections.league} onToggle={() => toggleSection('league')} isActive={level !== "all" || leagueStatus !== "all"} onClear={(e:any) => { e.stopPropagation(); setLeagueStatus("all"); setLevel("all"); }} />
-            {sections.league && (
-              <>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {[
-                    { key: "all", label: "All" },
-                    { key: "rostered", label: "My Team" }, 
-                    { key: "available", label: "Rest of MLB" } 
-                  ].map((opt) => { 
-                    const isLocked = !isUserPaid && opt.key !== "all"; 
-                    return (
-                      <button 
-                        key={opt.key} 
-                        onClick={() => !isLocked && setLeagueStatus(opt.key as LeagueStatus)} 
-                        style={{ 
-                          ...baseButtonStyle, 
-                          flex: 1, 
-                          padding: "6px 4px", 
-                          fontSize: 11, 
-                          ...(leagueStatus === opt.key ? selectedButtonStyle : null), 
-                          opacity: isLocked ? 0.6 : 1, 
-                          cursor: isLocked ? "not-allowed" : "pointer", 
-                          display: "flex", 
-                          alignItems: "center", 
-                          justifyContent: "center", 
-                          gap: "4px" 
-                        }}
-                      >
-                        {opt.label}
-                        {isLocked && <Icons.LockSmall />}
-                      </button>
-                    ); 
-                  })}
-                </div>
+         {sections.league && (
+                    <>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {[
+                          { key: "all", label: "All Players" },
+                          { key: "available", label: "Free Agents" },    // Shows unowned
+                          { key: "my_team", label: "My Team" },          // Shows yours
+                          { key: "rostered", label: "All Rostered" }     // Shows all taken
+                        ].map((opt) => { 
+                          const isLocked = !isUserPaid && opt.key !== "all"; 
+                          return (
+                            <button 
+                              key={opt.key} 
+                              onClick={() => !isLocked && setLeagueStatus(opt.key as LeagueStatus)} 
+                              style={{ 
+                                ...baseButtonStyle, 
+                                flex: 1, 
+                                padding: "6px 8px", // Slightly wider padding
+                                fontSize: 11, 
+                                ...(leagueStatus === opt.key ? selectedButtonStyle : null), 
+                                opacity: isLocked ? 0.6 : 1, 
+                                cursor: isLocked ? "not-allowed" : "pointer", 
+                                display: "flex", 
+                                alignItems: "center", 
+                                justifyContent: "center", 
+                                gap: "4px",
+                                whiteSpace: "nowrap" // Keep text on one line
+                              }}
+                            >
+                              {opt.label}
+                              {isLocked && <Icons.LockSmall />}
+                            </button>
+                          ); 
+                        })}
+                      </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {(["all", "mlb", "prospects"] as const).map(v => (
                     <button key={v} onClick={() => setLevel(v)} style={{ ...baseButtonStyle, flex: 1, padding: "6px 4px", fontSize: 11, ...(level === v ? selectedButtonStyle : null) }}>
