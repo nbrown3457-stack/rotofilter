@@ -5,23 +5,20 @@ import { useTeam } from "../context/TeamContext";
 
 export default function TeamSwitcher() {
   const [isOpen, setIsOpen] = useState(false);
-  
-  // FIXED: Changed 'userTeams' to 'teams' to match your Context file
-  const { activeTeam, teams, setActiveTeam } = useTeam(); 
+  const { activeTeam, teams, setActiveTeam, refreshLeague } = useTeam(); // <--- IMPORT refreshLeague
 
-  // Smart Label: Shows Team Name if synced, otherwise generic
   const buttonLabel = activeTeam ? `Viewing: ${activeTeam.team_name}` : "⚾ Sync League";
 
   return (
-    <div style={{ position: "relative", zIndex: 99999 }}>
+    <div style={{ position: "relative", zIndex: 99999, display: 'flex', gap: '8px' }}>
       
-      {/* THE BUTTON */}
+      {/* 1. THE DROPDOWN TOGGLE (Shows Name) */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          background: activeTeam ? "#1b5e20" : "#d32f2f", // Green if synced, Red if not
-          color: "white", 
-          border: "1px solid rgba(255,255,255,0.3)", 
+          background: "white", 
+          color: "#333", 
+          border: "1px solid #ccc", 
           padding: "6px 12px", 
           borderRadius: "6px",
           fontWeight: "bold",
@@ -29,20 +26,37 @@ export default function TeamSwitcher() {
           fontSize: "13px",
           display: "flex",
           alignItems: "center",
-          gap: "8px",
-          whiteSpace: "nowrap"
+          gap: "8px"
         }}
       >
         <span>{buttonLabel}</span>
         <span style={{ fontSize: "10px", opacity: 0.7 }}>▼</span>
       </button>
 
-      {/* THE DROPDOWN MENU */}
+      {/* 2. THE REAL SYNC BUTTON (Red/Green) */}
+      {/* Clicking this now FORCES the sync to run */}
+      <button 
+        onClick={() => refreshLeague()} 
+        style={{
+          background: activeTeam ? "#1b5e20" : "#d32f2f", 
+          color: "white", 
+          border: "none", 
+          padding: "6px 12px", 
+          borderRadius: "6px",
+          fontWeight: "bold",
+          cursor: "pointer",
+          fontSize: "13px"
+        }}
+      >
+        ↻ Sync Now
+      </button>
+
+      {/* DROPDOWN MENU (Unchanged) */}
       {isOpen && (
         <div style={{
           position: "absolute",
           top: "125%",
-          right: 0,
+          left: 0,
           background: "white",
           border: "1px solid #ccc",
           borderRadius: "8px",
@@ -55,9 +69,6 @@ export default function TeamSwitcher() {
           zIndex: 100000,
           color: "black"
         }}>
-          
-          {/* List User's Teams if they exist */}
-          {/* FIXED: Using 'teams' here instead of 'userTeams' */}
           {teams && teams.length > 0 && (
             <>
               <div style={{ padding: "8px", fontSize: "11px", color: "#666", fontWeight: "bold", textTransform: 'uppercase' }}>
@@ -82,17 +93,12 @@ export default function TeamSwitcher() {
                   }}
                 >
                   {team.team_name}
-                  <span style={{display: 'block', fontSize: '10px', color: '#888'}}>
-                    {team.seasonYear} Season
-                  </span>
                 </button>
               ))}
               <div style={{ borderBottom: "1px solid #eee", margin: "4px 0" }}></div>
             </>
           )}
-
-          {/* The "Add New" Button */}
-          <button 
+           <button 
              onClick={() => {
                const url = new URL(window.location.href);
                url.searchParams.set('sync', 'true');
