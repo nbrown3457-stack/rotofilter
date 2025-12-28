@@ -2,144 +2,124 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase outside the handler
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(req: Request) {
-  console.log("CHECKPOINT 1: Route Handler Started");
-
+  console.log("--- SYNC STARTED ---");
   try {
-    // 1. CHECK ENV VARS
-    if (!supabaseUrl || !supabaseKey) {
-        console.error("CRITICAL: Supabase Keys Missing on Server");
-        throw new Error("Server Misconfiguration: Missing Supabase Keys");
-    }
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    console.log("CHECKPOINT 2: Supabase Client Initialized");
-
-    // 2. PARSE REQUEST
     let body;
-    try {
-        body = await req.json();
-    } catch (e) {
-        console.error("JSON Parse Failed");
-        return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-    }
-    const { league_key } = body;
-    console.log(`CHECKPOINT 3: Request for League Key: ${league_key}`);
-
-    // 3. CHECK TOKENS
+    try { body = await req.json(); } catch(e) {}
+    const { league_key } = body || {};
+    
     const cookieStore = await cookies();
     const accessToken = cookieStore.get('yahoo_access_token')?.value;
 
-    if (!accessToken) {
-        console.error("CHECKPOINT FAILURE: No Access Token");
-        return NextResponse.json({ error: "No Token" }, { status: 401 });
-    }
-    console.log("CHECKPOINT 4: Access Token Found");
+    if (!accessToken) return NextResponse.json({ error: "No Token" }, { status: 401 });
 
-    // 4. FETCH YAHOO
-    console.log("CHECKPOINT 5: Fetching Yahoo API...");
+    // 1. FETCH DATA
+    console.log(`Fetching Yahoo: ${league_key}`);
     const response = await fetch(
       `https://fantasysports.yahooapis.com/fantasy/v2/league/${league_key}/teams/roster?format=json`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
-    console.log(`CHECKPOINT 6: Yahoo Response Status: ${response.status}`);
-    
     if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`CHECKPOINT FAILURE: Yahoo API Error Body: ${errorText.substring(0, 100)}`);
-        return NextResponse.json({ error: `Yahoo API Error: ${response.status}` }, { status: response.status });
+        return NextResponse.json({ error: `Yahoo Error: ${response.status}` }, { status: response.status });
     }
 
-    // 5. PARSE JSON
-    const data = await response.json();
-    console.log("CHECKPOINT 7: Yahoo JSON Parsed");
-
-    // 6. HUNTER SEEKER
-    const rosteredPlayers: any[] = [];
-    const foundTeams: any[] = [];
-
-    const findTeams = (node: any) => {
-        if (!node || typeof node !== 'object') return;
-        if (node.team_key) foundTeams.push(node);
-        else if (Array.isArray(node)) {
-             const meta = node.find((x: any) => x && x.team_key);
-             if (meta) foundTeams.push(node);
-        }
-        Object.values(node).forEach(child => findTeams(child));
-    };
-    findTeams(data);
+    const jsonText = await response.text();
+    console.log("--- DATA RECEIVED ---");
     
-    console.log(`CHECKPOINT 8: Found ${foundTeams.length} potential teams`);
+    // THE SPY: Log the first 1000 characters so we can see the structure in the logs
+    console.log("DATA PREVIEW:", jsonText.substring(0, 1000));
 
-    foundTeams.forEach((teamNode: any) => {
-        let teamKey = null;
-        let rosterNode = null;
+    // 2. THE NUCLEAR PARSER
+    // Instead of trusting the structure, we parse the JSON and hunt for EVERYTHING.
+    const data = JSON.parse(jsonText);
+    const rosteredPlayers: any[] = [];
 
-        if (Array.isArray(teamNode)) {
-            const meta = teamNode.find((x: any) => x.team_key);
-            teamKey = meta?.team_key;
-            rosterNode = teamNode.find((x: any) => x.roster);
-        } else {
-            teamKey = teamNode.team_key;
+    // Helper to extract players from ANYWHERE
+    const extractPlayers = (obj: any, currentTeamKey: string | null) => {
+        if (!obj || typeof obj !== 'object') return;
+
+        // Track Team Key if we find one
+        if (obj.team_key) currentTeamKey = obj.team_key;
+        
+        // Also check inside arrays for team keys
+        if (Array.isArray(obj)) {
+            const teamMeta = obj.find((x: any) => x && x.team_key);
+            if (teamMeta) currentTeamKey = teamMeta.team_key;
         }
 
-        if (teamKey && rosterNode) {
-            const findPlayers = (node: any) => {
-                if (!node || typeof node !== 'object') return;
-                if (Array.isArray(node)) {
-                     const pMeta = node.find((x: any) => x.player_id);
-                     if (pMeta) {
-                         const pNameObj = node.find((x: any) => x.name);
-                         rosteredPlayers.push({
-                             league_key: league_key,
-                             team_key: teamKey,
-                             yahoo_id: pMeta.player_id,
-                             player_name: pNameObj?.name?.full || "Unknown",
-                             updated_at: new Date()
-                         });
-                         return; 
-                     }
-                }
-                Object.values(node).forEach(child => findPlayers(child));
-            };
-            findPlayers(rosterNode);
+        // Check if this object IS a player
+        if (obj.player_id && currentTeamKey) {
+             // We found a player AND we know who owns them!
+             // Sometimes name is nested
+             let pName = "Unknown";
+             if (obj.name && obj.name.full) pName = obj.name.full;
+             // Sometimes name is in a sibling object in the same array
+             // But let's grab what we can.
+             
+             // Check if we already added this specific player/team combo
+             const exists = rosteredPlayers.find(p => p.yahoo_id === obj.player_id && p.team_key === currentTeamKey);
+             if (!exists) {
+                 rosteredPlayers.push({
+                     league_key: league_key,
+                     team_key: currentTeamKey,
+                     yahoo_id: obj.player_id,
+                     player_name: pName, 
+                     updated_at: new Date()
+                 });
+             }
         }
-    });
+        
+        // Yahoo Arrays: [{player_id: "123"}, {name: {...}}]
+        // We need to handle this specific structure
+        if (Array.isArray(obj) && currentTeamKey) {
+            const idObj = obj.find((x:any) => x && x.player_id);
+            const nameObj = obj.find((x:any) => x && x.name);
+            
+            if (idObj && nameObj) {
+                 rosteredPlayers.push({
+                     league_key: league_key,
+                     team_key: currentTeamKey,
+                     yahoo_id: idObj.player_id,
+                     player_name: nameObj.name.full,
+                     updated_at: new Date()
+                 });
+                 return; // Done with this array
+            }
+        }
 
-    console.log(`CHECKPOINT 9: Extracted ${rosteredPlayers.length} players`);
+        // Recurse
+        Object.values(obj).forEach(child => extractPlayers(child, currentTeamKey));
+    };
+
+    extractPlayers(data, null);
+
+    console.log(`--- NUCLEAR PARSER FOUND: ${rosteredPlayers.length} PLAYERS ---`);
 
     if (rosteredPlayers.length > 0) {
-        // 7. DB WRITE
-        console.log("CHECKPOINT 10: Starting DB Write...");
+        // DELETE OLD & INSERT NEW
+        await supabase.from('league_rosters').delete().eq('league_key', league_key);
         
-        const { error: deleteError } = await supabase.from('league_rosters').delete().eq('league_key', league_key);
-        if (deleteError) console.error("DB Delete Warning:", deleteError);
+        // Insert in batches of 50 to be safe
+        const { error } = await supabase.from('league_rosters').insert(rosteredPlayers);
         
-        const { error: insertError } = await supabase.from('league_rosters').insert(rosteredPlayers);
-        
-        if (insertError) {
-             console.error("CHECKPOINT FAILURE: DB Insert Error", insertError);
-             return NextResponse.json({ error: `DB Error: ${insertError.message}` }, { status: 500 });
+        if (error) {
+            console.error("DB Error:", error);
+            return NextResponse.json({ error: error.message }, { status: 500 });
         }
-        
-        console.log("CHECKPOINT 11: SUCCESS - Write Complete");
         return NextResponse.json({ success: true, count: rosteredPlayers.length });
     } else {
-        console.warn("CHECKPOINT WARNING: 0 Players Found");
-        return NextResponse.json({ error: "No players found in Yahoo data." }, { status: 500 });
+        // IF THIS FAILS, THE LOGS WILL SHOW US WHY (Look for "DATA PREVIEW")
+        return NextResponse.json({ error: "Still 0 players. Check Logs for 'DATA PREVIEW'." }, { status: 500 });
     }
 
   } catch (error: any) {
-    console.error("CHECKPOINT CRITICAL CRASH:", error);
-    // Return the ACTUAL error message to the frontend so you can see it in the Network Tab
-    return NextResponse.json({ 
-        error: "Server Crash", 
-        details: error.message, 
-        stack: error.stack 
-    }, { status: 500 });
+    console.error("CRASH:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
