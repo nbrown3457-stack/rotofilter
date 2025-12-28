@@ -8,23 +8,46 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(req: Request) {
   try {
-    const { league_key } = await req.json();
+    // 1. SAFELY PARSE REQUEST BODY
+    // If the frontend sends bad data, we catch it here instead of crashing
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    
+    const { league_key } = body;
     const cookieStore = await cookies();
     const accessToken = cookieStore.get('yahoo_access_token')?.value;
 
-    if (!accessToken || !league_key) return NextResponse.json({ error: "Missing tokens" }, { status: 400 });
+    if (!accessToken) {
+        return NextResponse.json({ error: "No Access Token Found - Please Log In Again" }, { status: 401 });
+    }
+    if (!league_key) {
+        return NextResponse.json({ error: "Missing league_key" }, { status: 400 });
+    }
 
-    // Fetch from Yahoo
+    // 2. FETCH FROM YAHOO (With Error Handling)
     const response = await fetch(
       `https://fantasysports.yahooapis.com/fantasy/v2/league/${league_key}/teams/roster?format=json`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    const data = await response.json();
 
+    // CRITICAL FIX: Check if Yahoo said "No" before trying to read data
+    if (!response.ok) {
+        console.error(`Yahoo API Error: ${response.status}`);
+        if (response.status === 401) {
+            return NextResponse.json({ error: "Token Expired. Please Log Out and Log In again." }, { status: 401 });
+        }
+        return NextResponse.json({ error: `Yahoo API Error: ${response.status}` }, { status: response.status });
+    }
+
+    const data = await response.json();
     const rosteredPlayers: any[] = [];
     const foundTeams: any[] = [];
 
-    // RECURSIVE PARSER (The Hunter-Seeker)
+    // 3. HUNTER-SEEKER PARSER
     const findTeams = (node: any) => {
         if (!node || typeof node !== 'object') return;
         if (node.team_key) foundTeams.push(node);
@@ -72,10 +95,13 @@ export async function POST(req: Request) {
     });
 
     if (rosteredPlayers.length > 0) {
-        // CLEAN SLATE INSERT
         await supabase.from('league_rosters').delete().eq('league_key', league_key);
         const { error } = await supabase.from('league_rosters').insert(rosteredPlayers);
-        if (error) throw new Error(error.message);
+        
+        if (error) {
+             console.error("DB Insert Error:", error);
+             return NextResponse.json({ error: `DB Error: ${error.message}` }, { status: 500 });
+        }
         
         return NextResponse.json({ success: true, count: rosteredPlayers.length });
     } else {
@@ -83,6 +109,7 @@ export async function POST(req: Request) {
     }
 
   } catch (error: any) {
+    console.error("Critical Crash:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
