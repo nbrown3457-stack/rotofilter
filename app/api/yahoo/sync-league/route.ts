@@ -7,7 +7,6 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(req: Request) {
-  console.log("--- SYNC STARTED ---");
   try {
     let body;
     try { body = await req.json(); } catch(e) {}
@@ -19,7 +18,7 @@ export async function POST(req: Request) {
     if (!accessToken) return NextResponse.json({ error: "No Token" }, { status: 401 });
 
     // 1. FETCH DATA
-    console.log(`Fetching Yahoo: ${league_key}`);
+    console.log(`Fetching Yahoo Roster for: ${league_key}`);
     const response = await fetch(
       `https://fantasysports.yahooapis.com/fantasy/v2/league/${league_key}/teams/roster?format=json`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -29,83 +28,72 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: `Yahoo Error: ${response.status}` }, { status: response.status });
     }
 
-    const jsonText = await response.text();
-    console.log("--- DATA RECEIVED ---");
-    
-    // THE SPY: Log the first 1000 characters so we can see the structure in the logs
-    console.log("DATA PREVIEW:", jsonText.substring(0, 1000));
-
-    // 2. THE NUCLEAR PARSER
-    // Instead of trusting the structure, we parse the JSON and hunt for EVERYTHING.
-    const data = JSON.parse(jsonText);
+    const data = await response.json();
     const rosteredPlayers: any[] = [];
 
-    // Helper to extract players from ANYWHERE
-    const extractPlayers = (obj: any, currentTeamKey: string | null) => {
-        if (!obj || typeof obj !== 'object') return;
+    // 2. THE CONTEXT-AWARE PARSER
+    // Yahoo Structure: fantasy_content -> league -> [metadata, { teams: { ... } }]
+    
+    let leagueData = data.fantasy_content?.league;
+    // Handle case where league is an array (common) or object
+    if (!Array.isArray(leagueData)) leagueData = [leagueData];
 
-        // Track Team Key if we find one
-        if (obj.team_key) currentTeamKey = obj.team_key;
+    // Find the part of the league that contains 'teams'
+    const teamsWrapper = leagueData.find((x: any) => x.teams);
+    
+    if (teamsWrapper && teamsWrapper.teams) {
+        const teamsObj = teamsWrapper.teams;
         
-        // Also check inside arrays for team keys
-        if (Array.isArray(obj)) {
-            const teamMeta = obj.find((x: any) => x && x.team_key);
-            if (teamMeta) currentTeamKey = teamMeta.team_key;
-        }
+        // Yahoo returns teams as an object with keys "0", "1", "2"... plus a "count" property
+        // We iterate over the values that are objects
+        Object.values(teamsObj).forEach((teamEntry: any) => {
+            if (teamEntry.team) {
+                // TEAM FOUND: It is an array.
+                // Index 0: Metadata (Team Key, Name)
+                // Index 1: Roster Data
+                const teamArray = teamEntry.team;
+                let teamKey = null;
 
-        // Check if this object IS a player
-        if (obj.player_id && currentTeamKey) {
-             // We found a player AND we know who owns them!
-             // Sometimes name is nested
-             let pName = "Unknown";
-             if (obj.name && obj.name.full) pName = obj.name.full;
-             // Sometimes name is in a sibling object in the same array
-             // But let's grab what we can.
-             
-             // Check if we already added this specific player/team combo
-             const exists = rosteredPlayers.find(p => p.yahoo_id === obj.player_id && p.team_key === currentTeamKey);
-             if (!exists) {
-                 rosteredPlayers.push({
-                     league_key: league_key,
-                     team_key: currentTeamKey,
-                     yahoo_id: obj.player_id,
-                     player_name: pName, 
-                     updated_at: new Date()
-                 });
-             }
-        }
-        
-        // Yahoo Arrays: [{player_id: "123"}, {name: {...}}]
-        // We need to handle this specific structure
-        if (Array.isArray(obj) && currentTeamKey) {
-            const idObj = obj.find((x:any) => x && x.player_id);
-            const nameObj = obj.find((x:any) => x && x.name);
-            
-            if (idObj && nameObj) {
-                 rosteredPlayers.push({
-                     league_key: league_key,
-                     team_key: currentTeamKey,
-                     yahoo_id: idObj.player_id,
-                     player_name: nameObj.name.full,
-                     updated_at: new Date()
-                 });
-                 return; // Done with this array
+                // Step A: Get Team Key from Index 0
+                if (Array.isArray(teamArray[0])) {
+                     const meta = teamArray[0].find((x: any) => x.team_key);
+                     if (meta) teamKey = meta.team_key;
+                }
+
+                // Step B: Get Players from Index 1
+                if (teamKey && teamArray[1] && teamArray[1].roster) {
+                    const playersObj = teamArray[1].roster['0'].players;
+                    
+                    // Loop through players ("0", "1", "2"...)
+                    Object.values(playersObj).forEach((playerEntry: any) => {
+                        if (playerEntry.player) {
+                            // Player is ALSO an array: [ {player_id...}, {name...} ]
+                            const pArray = playerEntry.player;
+                            const pMeta = pArray[0].find((x: any) => x.player_id);
+                            const pNameMeta = pArray[0].find((x: any) => x.name);
+                            
+                            if (pMeta) {
+                                rosteredPlayers.push({
+                                    league_key: league_key,
+                                    team_key: teamKey,
+                                    yahoo_id: pMeta.player_id,
+                                    player_name: pNameMeta?.name?.full || "Unknown",
+                                    updated_at: new Date()
+                                });
+                            }
+                        }
+                    });
+                }
             }
-        }
+        });
+    }
 
-        // Recurse
-        Object.values(obj).forEach(child => extractPlayers(child, currentTeamKey));
-    };
-
-    extractPlayers(data, null);
-
-    console.log(`--- NUCLEAR PARSER FOUND: ${rosteredPlayers.length} PLAYERS ---`);
+    console.log(`PARSER SUCCESS: Found ${rosteredPlayers.length} players.`);
 
     if (rosteredPlayers.length > 0) {
         // DELETE OLD & INSERT NEW
         await supabase.from('league_rosters').delete().eq('league_key', league_key);
         
-        // Insert in batches of 50 to be safe
         const { error } = await supabase.from('league_rosters').insert(rosteredPlayers);
         
         if (error) {
@@ -114,8 +102,7 @@ export async function POST(req: Request) {
         }
         return NextResponse.json({ success: true, count: rosteredPlayers.length });
     } else {
-        // IF THIS FAILS, THE LOGS WILL SHOW US WHY (Look for "DATA PREVIEW")
-        return NextResponse.json({ error: "Still 0 players. Check Logs for 'DATA PREVIEW'." }, { status: 500 });
+        return NextResponse.json({ error: "Parser finished but found 0 players." }, { status: 500 });
     }
 
   } catch (error: any) {
