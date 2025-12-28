@@ -5,6 +5,7 @@ import { createClient } from "@/app/utils/supabase/client";
 /* =============================================================================
    SECTION 0 — Imports
 ============================================================================= */
+//test note on 12/28 after crash
 
 // 1. GO UP ONE LEVEL (..) to find components
 import { PlayerDetailPopup } from "../components/PlayerDetailPopup";
