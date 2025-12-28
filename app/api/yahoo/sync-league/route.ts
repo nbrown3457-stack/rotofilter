@@ -14,103 +14,119 @@ export async function POST(req: Request) {
     const accessToken = cookieStore.get('yahoo_access_token')?.value;
 
     if (!accessToken || !league_key) {
-      return NextResponse.json({ error: "Missing tokens or league_key" }, { status: 400 });
+      return NextResponse.json({ error: "Missing tokens" }, { status: 400 });
     }
 
-    console.log(`SYNC: Starting sync for League ${league_key}...`);
-
-    // 1. Fetch FULL Rosters from Yahoo
+    // 1. Fetch from Yahoo
     const response = await fetch(
       `https://fantasysports.yahooapis.com/fantasy/v2/league/${league_key}/teams/roster?format=json`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-
-    if (!response.ok) {
-        console.error("SYNC: Yahoo API Error", response.status);
-        return NextResponse.json({ error: "Yahoo connection failed" }, { status: response.status });
-    }
-
     const data = await response.json();
+
     const rosteredPlayers: any[] = [];
 
-    // 2. ROBUST PARSING STRATEGY
-    // We drill down into the weird Yahoo structure safely
-    const leagueData = data?.fantasy_content?.league;
-    // Yahoo puts the teams list in the second element of the league array usually [metadata, teams]
-    const teamsData = Array.isArray(leagueData) ? leagueData[1]?.teams : leagueData?.teams;
-
-    if (teamsData && typeof teamsData === 'object') {
-      Object.values(teamsData).forEach((t: any) => {
-        // Yahoo "Team" object is usually an array: [ {metadata}, {roster} ]
-        if (!t?.team) return;
-
-        // 1. Get the Team Key (Who owns these players?)
-        const teamMetadata = Array.isArray(t.team) ? t.team[0] : null;
-        const teamKey = teamMetadata?.find((m: any) => m.team_key !== undefined)?.team_key;
+    // ---------------------------------------------------------
+    // THE HUNTER-SEEKER PARSER (Recursive)
+    // ---------------------------------------------------------
+    
+    // Step 1: Find all Objects that look like a "Team"
+    const foundTeams: any[] = [];
+    const findTeams = (node: any) => {
+        if (!node || typeof node !== 'object') return;
         
-        // 2. Get the Player List
-        const rosterContainer = Array.isArray(t.team) ? t.team[1] : null;
-        const playersList = rosterContainer?.roster?.['0']?.players;
+        // Yahoo Teams always have a 'team_key' in their metadata
+        // Sometimes the node IS the metadata, sometimes it WRAPS the metadata
+        if (node.team_key) {
+             foundTeams.push(node); // Found a team metadata object directly
+        } else if (Array.isArray(node)) {
+             // Check if this array contains a team metadata object
+             const meta = node.find((x: any) => x && x.team_key);
+             if (meta) foundTeams.push(node); // Push the whole array (metadata + roster)
+        }
+        
+        // Recurse deeper
+        Object.values(node).forEach(child => findTeams(child));
+    };
+    
+    // Start hunting for teams from the root
+    findTeams(data);
 
-        if (teamKey && playersList) {
-            Object.values(playersList).forEach((pWrapper: any) => {
-                const p = pWrapper?.player;
-                if (p && Array.isArray(p)) {
-                    // Extract IDs
-                    const playerId = p[0].find((x: any) => x.player_id !== undefined)?.player_id;
-                    const playerName = p[0].find((x: any) => x.name !== undefined)?.name?.full;
+    // Step 2: Extract Players from each found Team
+    foundTeams.forEach((teamNode: any) => {
+        let teamKey = null;
+        let rosterNode = null;
 
-                    if (playerId && teamKey) {
-                        rosteredPlayers.push({
-                            league_key: league_key,
-                            team_key: teamKey, 
-                            yahoo_id: playerId,
-                            player_name: playerName || "Unknown",
-                            updated_at: new Date()
-                        });
-                    }
+        // Extract Team Key
+        if (Array.isArray(teamNode)) {
+            const meta = teamNode.find((x: any) => x.team_key);
+            teamKey = meta?.team_key;
+            // The roster is usually a sibling in this same array
+            rosterNode = teamNode.find((x: any) => x.roster);
+        } else {
+            teamKey = teamNode.team_key;
+            // If we found the metadata object directly, the roster is likely not here
+            // This case is rare in the recursion but possible
+        }
+
+        if (teamKey && rosterNode) {
+            // Now we hunt for players INSIDE this roster node
+            const findPlayers = (node: any) => {
+                if (!node || typeof node !== 'object') return;
+                
+                // Found a player ID?
+                if (node.player_id) {
+                     // We found a player!
+                     // But we need the name too. Often 'node' is just {player_id: "123"}, 
+                     // and the name is in a sibling or parent. 
+                     // Yahoo players are usually arrays: [{player_id: "123", name: {...}}, {selected_position: ...}]
+                     // So we might be deep inside. 
+                     
+                     // Easier strategy: Look for the specific "Player Wrapper" array
+                     return; 
                 }
-            });
-        }
-      });
-    }
+                
+                // Yahoo Player Array Detection: look for array containing {player_key}
+                if (Array.isArray(node)) {
+                     const pMeta = node.find((x: any) => x.player_id);
+                     if (pMeta) {
+                         // This IS a player array
+                         const pNameObj = node.find((x: any) => x.name);
+                         rosteredPlayers.push({
+                             league_key: league_key,
+                             team_key: teamKey,
+                             yahoo_id: pMeta.player_id,
+                             player_name: pNameObj?.name?.full || "Unknown Player",
+                             updated_at: new Date()
+                         });
+                         return; // Don't dig deeper into this player
+                     }
+                }
 
-    console.log(`SYNC: Found ${rosteredPlayers.length} rostered players.`);
-
-    // 3. WRITE TO SUPABASE (The Critical Step)
-    if (rosteredPlayers.length > 0) {
-        // A. Delete old data for this league to avoid duplicates
-        const { error: deleteError } = await supabase
-            .from('league_rosters')
-            .delete()
-            .eq('league_key', league_key);
-        
-        if (deleteError) {
-             console.error("SYNC DB DELETE ERROR:", deleteError);
-             // We continue anyway, hoping the insert works
-        }
-
-        // B. Insert new data
-        const { error: insertError } = await supabase
-            .from('league_rosters')
-            .insert(rosteredPlayers);
+                Object.values(node).forEach(child => findPlayers(child));
+            };
             
-        if (insertError) {
-            console.error("SYNC DB INSERT ERROR:", insertError);
-            throw new Error(`Database Write Failed: ${insertError.message}`);
+            findPlayers(rosterNode);
         }
-    } else {
-        console.warn("SYNC: Parsing resulted in 0 players. Yahoo structure might have changed.");
-    }
-
-    return NextResponse.json({ 
-      success: true, 
-      count: rosteredPlayers.length,
-      message: `Saved ${rosteredPlayers.length} players to database`
     });
+    // ---------------------------------------------------------
+
+    console.log(`SYNC: Hunter-Seeker found ${rosteredPlayers.length} players.`);
+
+    // 2. Write to Supabase
+    if (rosteredPlayers.length > 0) {
+        // Clear old
+        await supabase.from('league_rosters').delete().eq('league_key', league_key);
+        // Insert new
+        const { error } = await supabase.from('league_rosters').insert(rosteredPlayers);
+        if (error) throw new Error(error.message);
+        
+        return NextResponse.json({ success: true, count: rosteredPlayers.length });
+    } else {
+        return NextResponse.json({ error: "Parsing found 0 players. Yahoo format unknown." }, { status: 500 });
+    }
 
   } catch (error: any) {
-    console.error("SYNC CRITICAL FAILURE:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
