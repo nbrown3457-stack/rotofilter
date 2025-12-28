@@ -12,52 +12,19 @@ export async function POST(req: Request) {
     const cookieStore = await cookies();
     const accessToken = cookieStore.get('yahoo_access_token')?.value;
 
-    // --- DEBUG STEP 1: Log that we started ---
-    // We write a fake row just to prove we can talk to the DB
-    await supabase.from('league_rosters').insert({
-        league_key: league_key || 'UNKNOWN',
-        yahoo_id: 'DEBUG-START',
-        player_name: 'Sync Started - Checking Yahoo...',
-        team_key: 'DEBUG'
-    });
+    if (!accessToken || !league_key) return NextResponse.json({ error: "Missing tokens" }, { status: 400 });
 
-    if (!accessToken || !league_key) {
-      return NextResponse.json({ error: "Missing tokens" }, { status: 400 });
-    }
-
-    // 2. Fetch from Yahoo
+    // Fetch from Yahoo
     const response = await fetch(
       `https://fantasysports.yahooapis.com/fantasy/v2/league/${league_key}/teams/roster?format=json`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-
-    // --- DEBUG STEP 2: Check Yahoo Status ---
-    if (!response.ok) {
-        // If Yahoo failed, WRITE THE ERROR to the database so we can see it
-        await supabase.from('league_rosters').insert({
-            league_key: league_key,
-            yahoo_id: 'DEBUG-ERROR',
-            player_name: `Yahoo Failed: ${response.status} ${response.statusText}`,
-            team_key: 'DEBUG'
-        });
-        return NextResponse.json({ error: "Yahoo API Failed" }, { status: response.status });
-    }
-
     const data = await response.json();
-    
-    // --- DEBUG STEP 3: Log what Yahoo sent us ---
-    // We grab the first 50 characters of the response to see if it's real data or an error message
-    const snippet = JSON.stringify(data).substring(0, 50);
-    await supabase.from('league_rosters').insert({
-        league_key: league_key,
-        yahoo_id: 'DEBUG-DATA',
-        player_name: `Yahoo Data: ${snippet}...`,
-        team_key: 'DEBUG'
-    });
 
     const rosteredPlayers: any[] = [];
+    const foundTeams: any[] = [];
 
-    // THE HUNTER-SEEKER PARSER
+    // RECURSIVE PARSER (The Hunter-Seeker)
     const findTeams = (node: any) => {
         if (!node || typeof node !== 'object') return;
         if (node.team_key) foundTeams.push(node);
@@ -67,8 +34,6 @@ export async function POST(req: Request) {
         }
         Object.values(node).forEach(child => findTeams(child));
     };
-    
-    const foundTeams: any[] = [];
     findTeams(data);
 
     foundTeams.forEach((teamNode: any) => {
@@ -86,7 +51,6 @@ export async function POST(req: Request) {
         if (teamKey && rosterNode) {
             const findPlayers = (node: any) => {
                 if (!node || typeof node !== 'object') return;
-                
                 if (Array.isArray(node)) {
                      const pMeta = node.find((x: any) => x.player_id);
                      if (pMeta) {
@@ -108,14 +72,14 @@ export async function POST(req: Request) {
     });
 
     if (rosteredPlayers.length > 0) {
-        // Delete DEBUG rows before saving real data
-        await supabase.from('league_rosters').delete().eq('team_key', 'DEBUG');
+        // CLEAN SLATE INSERT
         await supabase.from('league_rosters').delete().eq('league_key', league_key);
+        const { error } = await supabase.from('league_rosters').insert(rosteredPlayers);
+        if (error) throw new Error(error.message);
         
-        await supabase.from('league_rosters').insert(rosteredPlayers);
         return NextResponse.json({ success: true, count: rosteredPlayers.length });
     } else {
-        return NextResponse.json({ error: "Found 0 players" }, { status: 500 });
+        return NextResponse.json({ error: "No players found in Yahoo data." }, { status: 500 });
     }
 
   } catch (error: any) {
