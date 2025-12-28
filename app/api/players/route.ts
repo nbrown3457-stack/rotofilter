@@ -9,7 +9,6 @@ const DEFAULT_YEAR = '2025';
 const SEASON_END_DATE = '2025-09-29'; 
 const MAPPING_TABLE = 'player_mappings'; 
 
-// --- SAFETY CHECK: Initialize Supabase Conditionally ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = (supabaseUrl && supabaseKey) 
@@ -78,16 +77,11 @@ async function fetchSavantData(type: 'batter' | 'pitcher' | 'sprint' | 'fielding
   }
 }
 
-// --------------------------------------------------------------------------
-// HELPER: DATE CALCULATOR
-// --------------------------------------------------------------------------
 function getDateRange(range: string, customStart?: string | null, customEnd?: string | null) {
   if (range === 'custom' && customStart && customEnd) return { start: customStart, end: customEnd };
   if (range === 'season_curr' || range === 'season_last' || range === 'pace_season') return null;
-
   const end = new Date(SEASON_END_DATE);
   const start = new Date(SEASON_END_DATE);
-
   switch (range) {
     case 'last_7': start.setDate(end.getDate() - 7); break;
     case 'last_30': start.setDate(end.getDate() - 30); break;
@@ -95,7 +89,6 @@ function getDateRange(range: string, customStart?: string | null, customEnd?: st
     case 'yesterday': start.setDate(end.getDate() - 1); break;
     default: return null; 
   }
-
   return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
 }
 
@@ -116,18 +109,13 @@ export async function GET(request: NextRequest) {
     const range = searchParams.get('range') || 'season_curr';
     const customStart = searchParams.get('start');
     const customEnd = searchParams.get('end');
-    
-    // CONTEXT PARAMS (The new inputs from your frontend)
     const contextLeagueId = searchParams.get('league_id'); 
     const contextTeamId = searchParams.get('team_id');     
 
-    // GET COOKIES (Fallback)
     const cookieStore = await cookies();
     const cookieLeagueKey = cookieStore.get('active_league_key')?.value;
     const cookieTeamKey = cookieStore.get('active_team_key')?.value;
 
-    // DECIDE WHICH KEYS TO USE (Explicit Params > Cookies)
-    // We strictly prefer the params sent by the frontend now
     const activeLeagueKey = contextLeagueId || cookieLeagueKey;
     const activeTeamKey = contextTeamId || cookieTeamKey;
 
@@ -145,20 +133,11 @@ export async function GET(request: NextRequest) {
       ? `stats=byDateRange&startDate=${dates.start}&endDate=${dates.end}&group=hitting,pitching&sportId=${sportIds}&limit=3000`
       : `stats=season&season=${targetYear}&group=hitting,pitching&sportId=${sportIds}&limit=3000`;
 
-    // --- PHASE 1: CRITICAL DATA ---
     const rosterData = await fetchJson(`https://statsapi.mlb.com/api/v1/sports/1/players?season=${targetYear}&gameType=R`);
     if (!rosterData) throw new Error("MLB API Unreachable");
 
-    // --- PHASE 2: ENRICHMENT DATA ---
     const [
-      allStats, 
-      savantBatters, 
-      savantPitchers, 
-      savantSprint, 
-      savantFielding, 
-      savantMovement,
-      leagueOwnershipRes, 
-      idMappingsRes       
+      allStats, savantBatters, savantPitchers, savantSprint, savantFielding, savantMovement, leagueOwnershipRes, idMappingsRes       
     ] = await Promise.all([
       fetchJson(`https://statsapi.mlb.com/api/v1/stats?${statsParams}`),
       fetchSavantData('batter', targetYear),
@@ -166,9 +145,8 @@ export async function GET(request: NextRequest) {
       fetchSavantData('sprint', targetYear),
       fetchSavantData('fielding', targetYear),
       fetchSavantData('movement', targetYear),
-      // FETCH OWNERSHIP IF LEAGUE KEY EXISTS
       (supabase && activeLeagueKey)
-        ? supabase.from('league_rosters').select('yahoo_id, team_key').eq('league_key', activeLeagueKey).then(res => res)
+        ? supabase.from('league_rosters').select('yahoo_id, team_key, player_name').eq('league_key', activeLeagueKey).then(res => res)
         : Promise.resolve({ data: [], error: null }),
       supabase
         ? supabase.from(MAPPING_TABLE).select('yahoo_id, mlb_id').then(res => res)
@@ -178,7 +156,7 @@ export async function GET(request: NextRequest) {
     const leagueOwnership = leagueOwnershipRes?.data || [];
     const idMappings = idMappingsRes?.data || [];
 
-    // --- MAPPING LOGIC ---
+    // --- MAPPING LOGIC (ID + NAME FALLBACK) ---
     const yahooToMlb = new Map<string, number>();
     if (idMappings.length > 0) {
         idMappings.forEach((row: any) => {
@@ -190,24 +168,30 @@ export async function GET(request: NextRequest) {
     }
 
     const ownershipMap = new Map<number, string>(); 
+    // NEW: Name Map for backup ("Aaron Judge" -> "team_123")
+    const nameToOwnerMap = new Map<string, string>();
+
     if (leagueOwnership.length > 0) {
         leagueOwnership.forEach((r: any) => {
             const yId = r.yahoo_id.toString();
-            // Try explicit mapping first
+            // 1. Try explicit ID mapping
             let mId = yahooToMlb.get(yId);
-            
-            // If mapping fails, try using Yahoo ID as MLB ID (common for many players)
-            if (!mId) mId = parseInt(yId);
+            if (!mId) mId = parseInt(yId); // Fallback
 
             if (mId && !isNaN(mId)) {
                 ownershipMap.set(mId, r.team_key);
             }
+
+            // 2. Populate Name Map (Normalize to lowercase for better matching)
+            if (r.player_name) {
+                const cleanName = r.player_name.toLowerCase().trim();
+                // Store the team key for this name
+                nameToOwnerMap.set(cleanName, r.team_key);
+            }
         });
     }
 
-    // 3. BUILD MASTER MAP
     const masterMap = new Map();
-
     if (rosterData && rosterData.people) {
       rosterData.people.forEach((p: any) => {
         masterMap.set(p.id, {
@@ -247,7 +231,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 4. FINAL MERGE
     let players = Array.from(masterMap.values()).map((p: any) => {
       const mlbInfo = p.mlbInfo || rosterData?.people?.find((r: any) => r.id === p.id);
       const isPitcher = p.type === 'pitcher';
@@ -262,12 +245,18 @@ export async function GET(request: NextRequest) {
       const calculatedCSW = (safeAdv.called_strike_pct || 0) + (safeAdv.whiff_pct || 0); 
       const wrcProxy = safeAdv.woba ? Math.round(((safeAdv.woba / 0.315) * 100)) : 100;
 
-      // --- NEW OWNERSHIP LOGIC ---
+      // --- OWNERSHIP LOGIC (WITH NAME FALLBACK) ---
+      // 1. Check ID Match
       let ownerTeamKey = ownershipMap.get(p.id); 
-      let availability = 'AVAILABLE';
       
+      // 2. If no ID match, Check Name Match
+      if (!ownerTeamKey && p.name) {
+          const cleanName = p.name.toLowerCase().trim();
+          ownerTeamKey = nameToOwnerMap.get(cleanName);
+      }
+
+      let availability = 'AVAILABLE';
       if (ownerTeamKey) {
-        // If the player has an owner in the DB, check if it's the active team
         if (activeTeamKey && ownerTeamKey === activeTeamKey) {
             availability = 'MY_TEAM';
         } else {
@@ -277,7 +266,7 @@ export async function GET(request: NextRequest) {
 
       return {
         ...p, 
-        availability, // 'AVAILABLE' | 'MY_TEAM' | 'ROSTERED'
+        availability, 
         ownerTeamKey, 
         jerseyNumber: mlbInfo?.primaryNumber || "--",
         info: {
@@ -322,10 +311,6 @@ export async function GET(request: NextRequest) {
         }
       };
     });
-
-    // NOTE: We REMOVED the final filter here.
-    // We return ALL players to the frontend, but now they have correct 'availability' tags.
-    // The frontend filters them using 'leagueScope'.
 
     return NextResponse.json(players);
 
