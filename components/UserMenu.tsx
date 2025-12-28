@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/app/utils/supabase/client'; 
 import { LoginModal } from './LoginModal'; 
 import { User } from '@supabase/supabase-js';
+import { ppid } from 'process';
 
 export const UserMenu = () => {
   // 2. INITIALIZE THE CLIENT
@@ -11,7 +12,6 @@ export const UserMenu = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
   useEffect(() => {
     // 3. Get initial user (Now checks Cookies!)
     const getUser = async () => {
@@ -19,7 +19,6 @@ export const UserMenu = () => {
       setUser(session?.user ?? null);
     };
     getUser();
-
     // 4. Listen for Login/Logout events
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);

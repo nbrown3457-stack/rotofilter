@@ -102,7 +102,7 @@ export async function POST(req: Request) {
             throw new Error("Failed to save new rosters");
         }
     }
-// just a note
+
     return NextResponse.json({ 
       success: true, 
       count: rosteredPlayers.length,
