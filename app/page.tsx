@@ -775,43 +775,43 @@ const toggleStat = (key: StatKey) => {
         </div>
       </nav>
 
-    {/* MOBILE STICKY BAR (New Layout) */}
-      <div style={{
+{/* MOBILE FLOATING RESULTS (Hidden on Desktop) */}
+      <div className="mobile-floating-bar flex items-center justify-between md:hidden" style={{
         position: 'sticky',
-        top: 0, 
-        zIndex: 100,
-        background: '#1b5e20', 
-        padding: '10px 12px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between', // Pushes items to Left, Center, Right
-        boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+        top: '10px',
+        zIndex: 90,
+        margin: '0 12px 10px 12px',
+        background: '#1b5e20',
+        borderRadius: '50px',
+        padding: '8px 16px',
+        // Note: "display", "alignItems", and "justifyContent" moved to className above!
+        boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
         color: 'white',
-        marginBottom: '10px', // Adds space below so presets aren't squished
       }}>
         {compareList.length > 0 ? (
-          <button onClick={() => setIsCompareOpen(true)} style={{ flex: 1, background: "#4caf50", color: "#fff", border: "none", borderRadius: 20, padding: "8px", fontWeight: 900, fontSize: 13, boxShadow: "0 2px 5px rgba(0,0,0,0.2)" }}>
+          <button onClick={() => setIsCompareOpen(true)} style={{ flex: 1, background: "transparent", color: "#fff", border: "none", fontWeight: 900, fontSize: 13, textAlign: "center" }}>
             VIEW COMPARISON ({compareList.length})
           </button>
         ) : (
           <>
-            {/* LEFT: Jump to Top */}
-            <button 
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '8px', color: 'white', padding: '6px 10px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
-            >
-              ⬆ Filters
-            </button>
-
-            {/* CENTER: Count */}
-            <div style={{ fontWeight: 900, fontSize: 14 }}>
-              {filteredPlayers.length} <span style={{opacity: 0.8, fontWeight: 400, fontSize: 12}}>Players</span>
+            <div style={{ fontWeight: 900, fontSize: 13, textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}>
+              {filteredPlayers.length} Players
             </div>
-
-            {/* RIGHT: Jump to Results */}
             <button 
               onClick={scrollToResults} 
-              style={{ background: "white", color: "#1b5e20", border: "none", borderRadius: 20, padding: "6px 14px", fontWeight: 800, fontSize: 11, display: "flex", alignItems: "center", gap: 4, cursor: 'pointer' }}
+              style={{ 
+                background: "white", 
+                color: "#1b5e20", 
+                border: "none", 
+                borderRadius: 20, 
+                padding: "6px 14px", 
+                fontWeight: 800, 
+                fontSize: 11, 
+                display: "flex", 
+                alignItems: "center", 
+                gap: 4,
+                boxShadow: "0 2px 5px rgba(0,0,0,0.2)"
+              }}
             >
               Results ⬇
             </button>
