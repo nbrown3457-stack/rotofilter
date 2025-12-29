@@ -726,7 +726,7 @@ if (leagueStatus === "rostered") {
           <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
             <div onClick={handleGlobalReset} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <img 
-  src="/logo.svg" 
+  src="/logo-icon.svg" 
   alt="Logo" 
   style={{ 
     width: '32px',       // A bit bigger than the 24px text to stand out
