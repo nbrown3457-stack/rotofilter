@@ -1,0 +1,17 @@
+{
+  "name": "RotoFilter",
+  "short_name": "RotoFilter",
+  "icons": [
+    {
+      "src": "/rf-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "theme_color": "#1b5e20",
+  "background_color": "#1b5e20",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait"
+}
