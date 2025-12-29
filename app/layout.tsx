@@ -13,12 +13,12 @@ export const metadata: Metadata = {
   title: 'RotoFilter | Fantasy Baseball Intelligence',
   description: 'Filter your Yahoo Fantasy Baseball leagues with Statcast data.',
   icons: {
-    icon: '/logo-icon.svg',       // Shows in browser tabs
-    shortcut: '/logo-icon.svg',   // Chrome/Edge bookmarks
-    apple: '/logo-icon.svg',      // iPhone Home Screen
+    icon: '/rf-logo.svg',       // Shows in browser tabs
+    shortcut: '/rf-logo.svg',   // Chrome/Edge bookmarks
+    apple: '/rf-logo.svg',      // iPhone Home Screen
     other: {
       rel: 'apple-touch-icon-precomposed',
-      url: '/logo-icon.svg',
+      url: '/rf-logo.svg',
     },
   },
   manifest: '/site.webmanifest', // Android Home Screen Support
