@@ -1,20 +1,24 @@
 export type CoreId = 
-  | "standard"
+  | "profile"
+  | "std_hit"
   | "power"
-  | "hit"
-  | "approach"
+  | "discipline"
+  | "quality"
   | "speed"
-  | "defense"
-  | "pitch_shape"
-  | "outcomes";
+  | "std_pitch"
+  | "shape"
+  | "pitch_out"
+  | "defense";
 
 export const CORES: { id: CoreId; label: string }[] = [
-  { id: "standard", label: "Standard Stats" },
-  { id: "power", label: "Power & Batted Ball" },
-  { id: "hit", label: "Hit Tool & Expected" },
-  { id: "approach", label: "Plate Discipline" },
-  { id: "speed", label: "Speed" },
-  { id: "defense", label: "Defense" },
-  { id: "pitch_shape", label: "Pitch Shape" },
-  { id: "outcomes", label: "Advanced Outcomes" }
+  { id: "profile", label: "Profile & Context" },
+  { id: "std_hit", label: "Standard Hitting" },
+  { id: "power", label: "Power & Barrels" },
+  { id: "discipline", label: "Plate Discipline" },
+  { id: "quality", label: "Contact Quality & xStats" },
+  { id: "speed", label: "Speed & Baserunning" },
+  { id: "std_pitch", label: "Standard Pitching" },
+  { id: "shape", label: "Pitch Shape & Velocity" },
+  { id: "pitch_out", label: "Pitching Outcomes" },
+  { id: "defense", label: "Defense" }
 ];

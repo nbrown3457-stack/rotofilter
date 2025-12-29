@@ -130,9 +130,24 @@ const BUTTON_DARK_GREEN = "#1b5e20";
 const BUTTON_DYNASTY_PURPLE = "#6a1b9a"; 
 const BUTTON_RANGE_ORANGE = "#e65100";
 
-const BATTER_STATS = ['hr', 'rbi', 'sb', 'avg', 'ops', 'wrc_plus', 'iso', 'xwoba', 'xba', 'xslg', 'barrel_pct', 'hard_hit_pct', 'exit_velocity_avg', 'launch_angle_avg', 'sweet_spot_pct', 'chase_pct', 'zone_contact_pct'];
-const PITCHER_STATS = ['w', 'sv', 'era', 'whip', 'so', 'oaa', 'spin_rate', 'extension', 'ivb', 'xera'];
+// UPDATED: Complete list of stats to prevent "Ghost Zeros"
+const BATTER_STATS = [
+  'hr', 'rbi', 'sb', 'avg', 'ops', 'obp', 'slg', 'iso', 'wrc_plus',
+  'xwoba', 'xba', 'xslg', 'woba', 'savant_ba', 'savant_slg', 'xwoba_con',
+  'barrel_pct', 'hard_hit_pct', 'exit_velocity_avg', 'launch_angle_avg', 
+  'sweet_spot_pct', 'max_exit_velocity', 'ev_90', 'barrels', 'barrels_per_pa', 'launch_angle_dist',
+  'chase_pct', 'zone_contact_pct', 'contact_pct', 'swing_pct', 'whiff_pct', 
+  'bb_pct', 'k_pct', 'zone_swing_pct', 'called_strike_pct', 'csw_pct',
+  'sprint_speed', 'bolts', 'speed_percentile', 'top_speed', 'home_to_first', 'bsr', 'extra_base_pct', 'sb_per_pa'
+];
 
+const PITCHER_STATS = [
+  'w', 'l', 'sv', 'hld', 'era', 'whip', 'so', 'ip', 'g',
+  'xera', 'xba_allowed', 'xslg_allowed', 'xwoba_allowed', 'clutch_xwoba',
+  'velocity', 'spin_rate', 'ivb', 'h_break', 'vert_break', 'spin_axis', 
+  'extension', 'release_point_xyz', 'putaway_pct', 'gb_pct_pitch', 'xwoba_pitch',
+  'arm_value', 'arm_strength', 'fielding_runs' // (Fielding can be both, but often relevant here)
+];
 /* =============================================================================
    SECTION 3 — Sub-Components
 ============================================================================= */
@@ -196,6 +211,11 @@ const ToolLegend = () => (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#2196f3", background: "#e3f2fd", padding: "2px 6px", borderRadius: 4 }}>S</span><span style={{ fontSize: 10, color: "#555" }}>Speed (Spd &gt; 28)</span></div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#ff9800", background: "#fff3e0", padding: "2px 6px", borderRadius: 4 }}>D</span><span style={{ fontSize: 10, color: "#555" }}>Disc (BB% &gt; 10)</span></div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#9c27b0", background: "#f3e5f5", padding: "2px 6px", borderRadius: 4 }}>C</span><span style={{ fontSize: 10, color: "#555" }}>Context (OPS &gt; .800)</span></div>
+    {/* NEW: Season Anchor Legend Entry */}
+    <div style={{ display: "flex", alignItems: "center", gap: 6, borderLeft: "1px solid #ddd", paddingLeft: 12, marginLeft: 6 }}>
+        <span style={{ fontSize: 9, fontWeight: 900, color: '#999', border: '1px solid #ccc', borderRadius: '50%', width: '14px', height: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>S</span>
+        <span style={{ fontSize: 10, color: "#555" }}>Season Anchor</span>
+    </div>
   </div>
 );
 
@@ -216,13 +236,22 @@ export default function Home() {
   const [isCompareOpen, setIsCompareOpen] = useState(false);
   const [orderedCores, setOrderedCores] = useState<{ id: CoreId; label: string }[]>([...CORES]);
   const [openGroup, setOpenGroup] = useState<CoreId | null>(null);
-  const [isUserPaid, setIsUserPaid] = useState(false); 
+  const [isUserPaid, setIsUserPaid] = useState(true); 
   const [isMounted, setIsMounted] = useState(false);
   const resultsTableRef = useRef<HTMLDivElement>(null);
   const [sections, setSections] = useState({ league: true, positions: true, al: true, nl: true });
     
   // --- 2. NEW TEAM CONTEXT & FILTER STATE ---
   const { activeTeam } = useTeam(); // <--- CONNECTS TO THE BRAIN
+  // --- HELPER: Identify Season-Locked Stats ---
+  // If a stat is NOT in "Standard Hitting" or "Standard Pitching", it comes from Savant
+  // and is currently locked to the full season.
+  const isSeasonLocked = (key: string) => {
+    // We cast to 'any' to avoid strict type checks on the config import for now
+    const isStandardHit = CORE_STATS.std_hit?.includes(key as any);
+    const isStandardPitch = CORE_STATS.std_pitch?.includes(key as any);
+    return !isStandardHit && !isStandardPitch;
+  };
   const [leagueScope, setLeagueScope] = useState('all'); 
   const [search, setSearch] = useState(''); 
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -267,13 +296,19 @@ export default function Home() {
     }
   };
 
-  useEffect(() => {
+useEffect(() => {
     // Check initial session
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-      if (currentUser?.user_metadata?.is_paid) setIsUserPaid(true);
+      
+      // --- LIFT OFF UPDATE: FORCE UNLOCK ---
+      setIsUserPaid(true); 
+      // Original Logic (Saved for later):
+      // if (currentUser?.user_metadata?.is_paid) setIsUserPaid(true);
+      // -------------------------------------
+
       if (currentUser) fetchSavedFilters(currentUser); 
     };
     checkUser();
@@ -283,9 +318,12 @@ export default function Home() {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       
-      // Handle Paid Status
-      if (currentUser?.user_metadata?.is_paid) setIsUserPaid(true);
-      else setIsUserPaid(false);
+      // --- LIFT OFF UPDATE: FORCE UNLOCK ---
+      setIsUserPaid(true);
+      // Original Logic (Saved for later):
+      // if (currentUser?.user_metadata?.is_paid) setIsUserPaid(true);
+      // else setIsUserPaid(false);
+      // -------------------------------------
       
       // Handle Data Load vs. Cleanup
       if (currentUser) {
@@ -497,6 +535,21 @@ export default function Home() {
     const scoredData = players.map((p: any) => enrichPlayerData(p, dateRange));
 
     return scoredData.filter((p: any) => {
+      // --- SMART ISOLATION: Auto-hide batters if looking at Pitching Stats ---
+    const hasPitchingStats = selectedStatKeys.some(k => PITCHER_STATS.includes(k));
+    const hasBattingStats = selectedStatKeys.some(k => BATTER_STATS.includes(k));
+
+    // If I selected "Velocity" (Pitching) but NOT "Home Runs" (Batting), hide Batters.
+    if (hasPitchingStats && !hasBattingStats) {
+      if (p.type !== 'pitcher' && p.position !== 'P' && p.position !== 'SP' && p.position !== 'RP') return false;
+    }
+    
+    // If I selected "Exit Velo" (Batting) but NOT "ERA" (Pitching), hide Pitchers.
+    if (hasBattingStats && !hasPitchingStats) {
+      if (p.type === 'pitcher' || ['SP', 'RP', 'P'].includes(p.position)) return false;
+    }
+    // -----------------------------------------------------------------------
+    
       // 1. LEAGUE STATUS FILTERS
 // "Available" = Not owned by anyone (Free Agents)
 if (leagueStatus === "available") {
@@ -530,8 +583,29 @@ if (leagueStatus === "rostered") {
       return true;
     }).sort((a: any, b: any) => {
       if (!sortKey) return 0;
-      const valA = sortKey.includes('Score') ? a[sortKey] : parseFloat(a.stats[sortKey] || 0);
-      const valB = sortKey.includes('Score') ? b[sortKey] : parseFloat(b.stats[sortKey] || 0);
+      
+      // 1. Get Values
+      let valA = sortKey.includes('Score') ? a[sortKey] : parseFloat(a.stats[sortKey] || 0);
+      let valB = sortKey.includes('Score') ? b[sortKey] : parseFloat(b.stats[sortKey] || 0);
+      
+      // 2. QUALIFIER CHECK (The Magic Fix)
+      // Only apply this penalty if we are sorting by a Rate Stat
+      const rateStats = ['avg', 'obp', 'slg', 'ops', 'era', 'whip', 'k_pct', 'bb_pct', 'xwoba', 'hard_hit_pct'];
+      if (rateStats.includes(sortKey)) {
+          // Define Thresholds (Lower for Last 7 Days)
+          const minPA = dateRange === 'last_7' ? 5 : 25;
+          const minIP = dateRange === 'last_7' ? 2 : 10;
+          
+          const aQualified = (a.type === 'pitcher' || ['SP','RP','P'].includes(a.position)) ? (a.stats.ip || 0) >= minIP : (a.stats.pa || 0) >= minPA;
+          const bQualified = (b.type === 'pitcher' || ['SP','RP','P'].includes(b.position)) ? (b.stats.ip || 0) >= minIP : (b.stats.pa || 0) >= minPA;
+
+          // Always push Qualified players to the top (-1), regardless of sort direction
+          // This ensures that when you sort by OPS, you see Judge/Soto, not the 1-for-1 rookie.
+          if (aQualified && !bQualified) return -1;
+          if (!aQualified && bQualified) return 1;
+      }
+
+      // 3. Standard Sort for everyone else
       return sortDir === "asc" ? valA - valB : valB - valA;
     });
   }, [players, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange]);
@@ -931,11 +1005,33 @@ if (leagueStatus === "rostered") {
                     <tr>
                       <th title="Select to Compare" style={{ padding: 8, width: 32, textAlign: "center", color: "#888", fontSize: "10px", fontWeight: 900 }}>VS</th>
                       <th onClick={() => handleSort('name')} style={{ padding: "8px 12px", textAlign: "left", cursor: "pointer" }}>Player {sortKey === 'name' && (sortDir === 'asc' ? <Icons.SortAsc /> : <Icons.SortDesc />)}</th>
-                      {selectedStatKeys.map(k => (
-                        <th key={k} onClick={() => handleSort(k)} style={{ padding: "8px 12px", textAlign: "right", color: BUTTON_DARK_GREEN, cursor: "pointer" }}>
-                          {STATS[k].label} {sortKey === k && (sortDir === 'asc' ? <Icons.SortAsc /> : <Icons.SortDesc />)}
-                        </th>
-                      ))}
+                     {selectedStatKeys.map(k => {
+                        // Check if we need to show the Season Lock Badge
+                        const showLock = dateRange !== 'season_curr' && dateRange !== 'pace_season' && isSeasonLocked(k);
+                        
+                        return (
+                          <th key={k} onClick={() => handleSort(k)} style={{ padding: "8px 12px", textAlign: "right", color: BUTTON_DARK_GREEN, cursor: "pointer" }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
+                              {showLock && (
+                                <span title="This stat is anchored to the Full Season (Talent Metric)" style={{ 
+                                  fontSize: 9, 
+                                  fontWeight: 900, 
+                                  color: '#999', 
+                                  border: '1px solid #ccc', 
+                                  borderRadius: '50%', 
+                                  width: '14px',
+                                  height: '14px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'help'
+                                }}>S</span>
+                              )}
+                              {STATS[k].label} {sortKey === k && (sortDir === 'asc' ? <Icons.SortAsc /> : <Icons.SortDesc />)}
+                            </div>
+                          </th>
+                        );
+                      })}
                       <th onClick={() => handleSort('dynaScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_DYNASTY_PURPLE }}>Dynasty</th>
                       <th onClick={() => handleSort('rotoScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_DARK_GREEN }}>Roto</th>
                       <th onClick={() => handleSort('pointsScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: "#0288d1" }}>Points</th> 
@@ -1000,14 +1096,53 @@ if (leagueStatus === "rostered") {
                                 </div>
                               </div>
                             </td>
-                            {selectedStatKeys.map(k => {
-                              const isBatterStat = BATTER_STATS.includes(k);
-                              const isPitcherStat = PITCHER_STATS.includes(k);
-                              if ((isPitcher && isBatterStat) || (!isPitcher && isPitcherStat)) {
-                                return <td key={k} style={{ textAlign: "center", padding: "12px 10px", color: "#ccc" }}>-</td>;
+                          {selectedStatKeys.map(k => {
+                      const isBatterStat = BATTER_STATS.includes(k);
+                      const isPitcherStat = PITCHER_STATS.includes(k);
+                      
+                      // 1. Ghost Zero Check (Hide irrelevant stats)
+                      if ((isPitcher && isBatterStat) || (!isPitcher && isPitcherStat)) {
+                        return <td key={k} style={{ textAlign: "center", padding: "12px 10px", color: "#ccc" }}>-</td>;
+                      }
+
+                      // 2. Get Raw Value
+                      const rawVal = p.stats?.[k];
+                      if (rawVal === undefined || rawVal === null) {
+                         return <td key={k} style={{ textAlign: "right", padding: "8px 12px", color: "#ccc" }}>-</td>;
+                      }
+
+                      // 3. Smart Formatting
+                      const config = STATS[k];
+                      let displayVal = rawVal;
+
+                      if (config) {
+                          const num = parseFloat(rawVal);
+                          if (!isNaN(num)) {
+                              if (config.unit === 'percent') {
+                                  // Add % sign (and fix decimal if needed)
+                                  displayVal = `${num.toFixed(1)}%`;
+                              } else if (['avg', 'obp', 'slg', 'xba', 'xwoba', 'woba'].includes(k)) {
+                                  // Baseball Format: .300 (no leading zero)
+                                  displayVal = num.toFixed(3).replace(/^0+/, ''); 
+                              } else if (['era', 'whip', 'k_bb_ratio', 'xera', 'fip'].includes(k)) {
+                                  // Pitching Ratios: 3.45
+                                  displayVal = num.toFixed(2);
+                              } else if (['ip'].includes(k)) {
+                                  // Innings: 120.1
+                                  displayVal = num.toFixed(1);
+                              } else {
+                                  // Integers (HR, SB) or 1-decimal for Ev/Speed
+                                  if (Number.isInteger(num)) {
+                                     displayVal = num.toString();
+                                  } else {
+                                     displayVal = num.toFixed(1);
+                                  }
                               }
-                              return <td key={k} style={{ textAlign: "right", padding: "8px 12px", fontWeight: 700 }}>{p.stats?.[k] ?? "-"}</td>
-                            })}
+                          }
+                      }
+
+                      return <td key={k} style={{ textAlign: "right", padding: "8px 12px", fontWeight: 700, fontFamily: "ui-monospace, monospace" }}>{displayVal}</td>
+                    })}
                             <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: BUTTON_DYNASTY_PURPLE }}>{p.dynaScore}</td>
                             <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: BUTTON_DARK_GREEN }}>{p.rotoScore}</td>
                             <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: "#0288d1" }}>{p.pointsScore}</td> 

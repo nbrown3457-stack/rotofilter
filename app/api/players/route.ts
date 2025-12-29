@@ -9,6 +9,16 @@ const DEFAULT_YEAR = '2025';
 const SEASON_END_DATE = '2025-09-29'; 
 const MAPPING_TABLE = 'player_mappings'; 
 
+// Park Factors (100 is Average, >100 is Hitter Friendly, <100 is Pitcher Friendly)
+const PARK_FACTORS: Record<string, number> = {
+  'ARI': 100, 'ATL': 102, 'BAL': 98, 'BOS': 104, 'CHC': 101, 'CWS': 99, 
+  'CIN': 108, 'CLE': 98, 'COL': 112, 'DET': 97, 'HOU': 99, 'KC': 103, 
+  'LAA': 100, 'LAD': 100, 'MIA': 96, 'MIL': 100, 'MIN': 99, 'NYM': 95, 
+  'NYY': 102, 'OAK': 96, 'PHI': 103, 'PIT': 98, 'SD': 95, 'SEA': 94, 
+  'SF': 97, 'STL': 98, 'TB': 96, 'TEX': 101, 'TOR': 101, 'WSH': 100,
+  'FA': 100
+};
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = (supabaseUrl && supabaseKey) 
@@ -18,6 +28,9 @@ const supabase = (supabaseUrl && supabaseKey)
 // --------------------------------------------------------------------------
 // HELPER: FETCH SAVANT DATA
 // --------------------------------------------------------------------------
+// --------------------------------------------------------------------------
+// HELPER: FETCH SAVANT DATA (UPDATED WITH SMART PARSER & ALL STATS)
+// --------------------------------------------------------------------------
 async function fetchSavantData(type: 'batter' | 'pitcher' | 'sprint' | 'fielding' | 'movement', year: string) {
   try {
     let url = "";
@@ -25,38 +38,89 @@ async function fetchSavantData(type: 'batter' | 'pitcher' | 'sprint' | 'fielding
     else if (type === 'fielding') url = `https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=Fielder&year=${year}&team=&min=1&csv=true`;
     else if (type === 'movement') url = `https://baseballsavant.mlb.com/leaderboard/pitch-movement?year=${year}&team=&min=1&pitch_type=ALL&csv=true`;
     else {
+      // BATTER & PITCHER: Grab every useful metric
       const metrics = ["xwoba", "xba", "xslg", "woba", "ba", "slg", "exit_velocity_avg", "launch_angle_avg", "sweet_spot_percent", "barrel_batted_rate", "hard_hit_percent", "whiff_percent", "swing_percent", "oz_swing_percent", "k_percent", "bb_percent", "iz_contact_percent", "called_strike_percent"].join(",");
       url = `https://baseballsavant.mlb.com/leaderboard/custom?year=${year}&type=${type}&filter=&sort=1&sortDir=desc&min=1&selections=${metrics}&csv=true`;
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000); 
+    const timeout = setTimeout(() => controller.abort(), 8000); 
 
     const res = await fetch(url, { cache: 'no-store', signal: controller.signal });
     clearTimeout(timeout);
 
-    if (!res.ok) return new Map();
+    if (!res.ok) {
+        console.log(`[SAVANT ERROR] Failed to fetch ${type}: ${res.status}`);
+        return new Map();
+    }
+    
     const text = await res.text();
     const rows = text.split('\n');
-    const headers = rows[0].split(',').map(h => h.replace(/"/g, '').trim());
+
+    // 1. SMART HEADER PARSING (Handles quotes correctly)
+    const regex = /(?:^|,)(\"(?:[^\"]+|\"\")*\"|[^,]*)/g;
+    
+    const parseCSVLine = (line: string) => {
+        const matches = [];
+        let match;
+        while ((match = regex.exec(line)) !== null) {
+            let val = match[1].replace(/^,/, '').trim();
+            if (val.startsWith('"') && val.endsWith('"')) {
+                val = val.slice(1, -1);
+            }
+            matches.push(val);
+        }
+        return matches;
+    }
+
+    if (rows.length < 2) return new Map();
+
+    const headers = parseCSVLine(rows[0]);
     const idx: Record<string, number> = {};
     headers.forEach((h, i) => idx[h] = i);
 
+    // Spy on mapped headers to confirm success
+    if (type === 'batter') console.log(`[SAVANT FIXED] Batter Headers Mapped:`, Object.keys(idx));
+
     const dataMap = new Map();
+    
     for (let i = 1; i < rows.length; i++) {
-      const row = rows[i].split(',');
+      const row = parseCSVLine(rows[i]);
       if (row.length < 2) continue;
-      const id = parseInt(row[idx['player_id']]);
+
+      const idStr = row[idx['player_id']] || row[idx['pitcher_id']];
+      const id = parseInt(idStr);
       if (isNaN(id)) continue;
-      
-      const parseVal = (key: string) => parseFloat(row[idx[key]]) || 0;
-      if (type === 'sprint') dataMap.set(id, { sprint_speed: parseVal('sprint_speed') });
-      else if (type === 'fielding') dataMap.set(id, { oaa: parseVal('outs_above_average') });
-      else if (type === 'movement') dataMap.set(id, { ivb: parseVal('pfx_z'), spin_rate: parseVal('avg_spin') });
+
+      const parseVal = (key: string) => {
+          const val = row[idx[key]];
+          return val ? (parseFloat(val) || 0) : 0;
+      };
+
+      if (type === 'sprint') {
+          dataMap.set(id, { sprint_speed: parseVal('sprint_speed'), bolts: parseVal('bolts') });
+      }
+      else if (type === 'fielding') {
+          dataMap.set(id, { oaa: parseVal('outs_above_average'), fielding_runs: parseVal('fielding_runs_prevented') });
+      }
+      else if (type === 'movement') {
+          dataMap.set(id, { 
+              velocity: parseVal('avg_speed'), 
+              spin_rate: 0, 
+              ivb: parseVal('pitcher_break_z_induced'),
+              h_break: parseVal('pitcher_break_x'),
+              pitch_type: row[idx['pitch_type']]
+          });
+      }
       else {
         dataMap.set(id, {
-          xwoba: parseVal('xwoba'), xba: parseVal('xba'), xslg: parseVal('xslg'),
-          woba: parseVal('woba'), exit_velocity_avg: parseVal('exit_velocity_avg'),
+          xwoba: parseVal('xwoba'), 
+          xba: parseVal('xba'), 
+          xslg: parseVal('xslg'),
+          woba: parseVal('woba'), 
+          ba: parseVal('ba'),
+          slg: parseVal('slg'),
+          exit_velocity_avg: parseVal('exit_velocity_avg'),
           launch_angle_avg: parseVal('launch_angle_avg'),
           barrel_pct: parseVal('barrel_batted_rate'),
           hard_hit_pct: parseVal('hard_hit_percent'),
@@ -73,6 +137,7 @@ async function fetchSavantData(type: 'batter' | 'pitcher' | 'sprint' | 'fielding
     }
     return dataMap;
   } catch (error) { 
+    console.error(`Error fetching ${type}`, error);
     return new Map(); 
   }
 }
@@ -131,7 +196,7 @@ export async function GET(request: NextRequest) {
     const sportIds = "1";
     let statsParams = dates 
       ? `stats=byDateRange&startDate=${dates.start}&endDate=${dates.end}&group=hitting,pitching&sportId=${sportIds}&limit=3000`
-      : `stats=season&season=${targetYear}&group=hitting,pitching&sportId=${sportIds}&limit=3000`;
+      : `stats=season&season=${targetYear}&gameType=R&group=hitting,pitching&sportId=${sportIds}&limit=3000&playerPool=ALL`;
 
     const rosterData = await fetchJson(`https://statsapi.mlb.com/api/v1/sports/1/players?season=${targetYear}&gameType=R`);
     if (!rosterData) throw new Error("MLB API Unreachable");
@@ -214,6 +279,7 @@ export async function GET(request: NextRequest) {
         if (group.splits) {
           group.splits.forEach((s: any) => {
             const id = s.player.id;
+
             const existing = masterMap.get(id) || {
               id: id,
               name: s.player.fullName,
@@ -275,7 +341,16 @@ export async function GET(request: NextRequest) {
           draft: mlbInfo?.draftYear ? `${mlbInfo.draftYear}` : "--",
         },
         stats: {
+          // --- NEW PROFILE DATA ---
+          age: mlbInfo?.currentAge || 0,
+          bats: mlbInfo?.batSide?.code || "R",
+          throws: mlbInfo?.pitchHand?.code || "R",
+          park_factor: PARK_FACTORS[mapTeamIdToAbbr(p.currentTeam?.id)] || 100,
+          // ------------------------
+          // --- EXISTING CORE STATS ---
           ab: stdStats.atBats || 0,
+          pa: stdStats.plateAppearances || 0,
+          g: stdStats.gamesPlayed || 0,
           ip: parseFloat(stdStats.inningsPitched || 0),
           avg: safeFloat(stdStats.avg),
           hr: stdStats.homeRuns || 0,
@@ -285,29 +360,47 @@ export async function GET(request: NextRequest) {
           ops: safeFloat(stdStats.ops),
           era: safeFloat(stdStats.era),
           w: stdStats.wins || 0,
+          l: stdStats.losses || 0,
           sv: stdStats.saves || 0,
           so: stdStats.strikeOuts || 0,
           whip: safeFloat(stdStats.whip),
+          
+          // --- ADVANCED STATS (FIXED & EXPANDED) ---
           iso: safeFloat(calculatedISO),
           wrc_plus: wrcProxy,
           csw_pct: safeFloat(calculatedCSW),
+          
+          // Savant Hitting/Pitching
           xwoba: safeFloat(safeAdv.xwoba),
           xba: safeFloat(safeAdv.xba),
           xslg: safeFloat(safeAdv.xslg),
+          woba: safeFloat(safeAdv.woba),
+          savant_ba: safeFloat(safeAdv.ba),
+          savant_slg: safeFloat(safeAdv.slg),
           exit_velocity_avg: safeFloat(safeAdv.exit_velocity_avg),
           launch_angle_avg: safeFloat(safeAdv.launch_angle_avg),
           barrel_pct: safeFloat(safeAdv.barrel_pct),
           hard_hit_pct: safeFloat(safeAdv.hard_hit_pct),
           sweet_spot_pct: safeFloat(safeAdv.sweet_spot_pct),
           whiff_pct: safeFloat(safeAdv.whiff_pct),
+          swing_pct: safeFloat(safeAdv.swing_pct),
           chase_pct: safeFloat(safeAdv.chase_pct),
           k_pct: safeFloat(safeAdv.k_pct),
           bb_pct: safeFloat(safeAdv.bb_pct),
           zone_contact_pct: safeFloat(safeAdv.zone_contact_pct),
+          called_strike_pct: safeFloat(safeAdv.called_strike_pct),
+
+          // Speed & Fielding
           sprint_speed: safeFloat(speedStats.sprint_speed),
+          bolts: safeFloat(speedStats.bolts),
           oaa: safeFloat(fieldStats.oaa),
+          fielding_runs: safeFloat(fieldStats.fielding_runs),
+
+          // Movement (Pitching)
+          velocity: safeFloat(moveStats.velocity),
           spin_rate: safeFloat(moveStats.spin_rate),
-          ivb: safeFloat(moveStats.ivb)
+          ivb: safeFloat(moveStats.ivb),
+          h_break: safeFloat(moveStats.h_break)
         }
       };
     });

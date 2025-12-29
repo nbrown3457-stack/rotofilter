@@ -2,13 +2,12 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
-// Initialize Supabase with Service Role for batch lookups
-const supabase = createClient(
+export async function GET() {
+  const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY! 
 );
 
-export async function GET() {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get('yahoo_access_token')?.value;
 
