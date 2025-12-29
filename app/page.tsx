@@ -224,6 +224,7 @@ const ToolLegend = () => (
 ============================================================================= */
 export default function Home() {
   const supabase = createClient();
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
 
   // --- 1. STANDARD STATE ---
   const [players, setPlayers] = useState<any[]>([]);
@@ -798,10 +799,93 @@ const toggleStat = (key: StatKey) => {
       </div>
 
       {/* MOBILE BOTTOM NAV */}
-      <div className="mobile-bottom-nav">
-        {[{ id: "filters", label: "Filters", Icon: Icons.Filters }, { id: "rosters", label: "Rosters", Icon: Icons.Rosters }, { id: "closers", label: "Closers", Icon: Icons.Closers }, { id: "prospects", label: "Prospects", Icon: Icons.Prospects }, { id: "grade", label: "Grade", Icon: Icons.Grade }, { id: "trade", label: "Trade", Icon: Icons.Trade }, { id: "community", label: "Community", Icon: Icons.Community }, { id: "sync", label: "Sync", Icon: Icons.Sync }].map((item) => (
-          <a key={item.id} href="#" onClick={(e) => { e.preventDefault(); setActiveTab(item.id); if(item.id === 'sync') setIsSyncModalOpen(true); }} className={`mobile-nav-item ${activeTab === item.id ? "active" : ""}`}><item.Icon />{item.label}</a>
-        ))}
+      {/* 1. TOOLS POPUP MENU (Hidden by default, appears above 'Tools' button) */}
+      {isToolsOpen && (
+        <div style={{
+          position: 'fixed',
+          bottom: '70px',  // Floats above the nav bar
+          right: '80px',   // Positioned roughly above the 4th button
+          background: 'white',
+          borderRadius: '12px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+          zIndex: 200,
+          minWidth: '140px',
+          border: '1px solid #eee',
+          overflow: 'hidden',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          {/* THE SUB-MENU ITEMS */}
+          {[
+            { id: "prospects", label: "Prospects", Icon: Icons.Prospects },
+            { id: "closers", label: "Closers", Icon: Icons.Closers },
+            { id: "grade", label: "Grade", Icon: Icons.Grade },
+            { id: "trade", label: "Trade", Icon: Icons.Trade },
+          ].map((item) => (
+            <div 
+              key={item.id} 
+              onClick={(e) => { 
+                e.preventDefault(); 
+                setActiveTab(item.id); 
+                setIsToolsOpen(false); // Close menu after clicking
+              }} 
+              style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid #f5f5f5',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                fontSize: '13px',
+                fontWeight: 600,
+                color: activeTab === item.id ? '#1b5e20' : '#333',
+                background: activeTab === item.id ? '#e8f5e9' : 'white',
+                cursor: 'pointer'
+              }}
+            >
+              <item.Icon /> {item.label}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 2. MAIN 5-COLUMN BOTTOM NAV */}
+      <div className="mobile-bottom-nav" style={{ 
+        display: 'grid', 
+        gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', // 5 Equal Columns
+        zIndex: 201 
+      }}> 
+        
+        {/* 1. FILTERS (Home) */}
+        <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('filters'); setIsToolsOpen(false); }} className={`mobile-nav-item ${activeTab === 'filters' ? "active" : ""}`}>
+          <Icons.Filters /> Filters
+        </a>
+
+        {/* 2. ROSTERS (Team Switcher) */}
+        <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('rosters'); setIsToolsOpen(false); }} className={`mobile-nav-item ${activeTab === 'rosters' ? "active" : ""}`}>
+          <Icons.Rosters /> Rosters
+        </a>
+
+        {/* 3. COMMUNITY */}
+        <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('community'); setIsToolsOpen(false); }} className={`mobile-nav-item ${activeTab === 'community' ? "active" : ""}`}>
+          <Icons.Community /> Community
+        </a>
+
+        {/* 4. TOOLS (Trigger) */}
+        <a 
+          href="#" 
+          onClick={(e) => { e.preventDefault(); setIsToolsOpen(!isToolsOpen); }} 
+          // Highlights if the active tab is one of the hidden tools
+          className={`mobile-nav-item ${['prospects', 'closers', 'grade', 'trade'].includes(activeTab) ? "active" : ""}`}
+        >
+          {/* Custom Wrench Icon */}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          Tools
+        </a>
+
+        {/* 5. SYNC (Action) */}
+        <a href="#" onClick={(e) => { e.preventDefault(); setIsSyncModalOpen(true); setIsToolsOpen(false); }} className="mobile-nav-item">
+          <Icons.Sync /> Sync
+        </a>
+
       </div>
 
       {/* MAIN CONTAINER FIXED FOR WHITE BORDER ISSUE */}
