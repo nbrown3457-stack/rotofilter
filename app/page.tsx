@@ -721,57 +721,99 @@ const toggleStat = (key: StatKey) => {
       <div className="beta-banner">BETA • v1.2 • Dec 2025</div>
       {renderCompareModal()}
       
-      {/* TOP NAV: Integrated Switcher & NO CONDITIONAL LOCKS */}
-<nav style={{ 
-  position: 'sticky', 
-  top: 0, 
-  zIndex: 99999, /* NUCLEAR OPTION: Force this to be the top layer */
-  background: '#1a1a1a', 
-  borderBottom: '1px solid #333', 
-  height: '64px', 
-  display: 'flex', 
-  alignItems: 'center', 
-  padding: '0 24px',
-  boxShadow: '0 4px 20px rgba(0,0,0,0.5)' 
-}}>
-        <div style={{ maxWidth: 1600, margin: '0 auto', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+  {/* ==============================================================================
+          TOP NAVIGATION: CONTROL CLUSTER EDITION
+          Matches Desktop & Mobile: Logo on Left | Controls on Right
+         ============================================================================== */}
+      <nav style={{ 
+        position: 'sticky', 
+        top: 0, 
+        zIndex: 99999, 
+        background: '#1a1a1a', 
+        borderBottom: '1px solid #333', 
+        height: '64px', 
+        display: 'flex', 
+        alignItems: 'center', 
+        padding: '0 12px', 
+        boxShadow: '0 4px 20px rgba(0,0,0,0.5)' 
+      }}>
+        <div style={{ width: '100%', maxWidth: 1600, margin: '0 auto', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          
+          {/* LEFT SIDE: LOGO & DESKTOP LINKS */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            
+            {/* LOGO */}
             <div onClick={handleGlobalReset} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <img 
-  src="/rf-logo.svg" 
-  alt="RF" 
-  style={{ 
-    width: '32px',       // A bit bigger than the 24px text to stand out
-    height: '32px', 
-    marginRight: '1px', // Adds breathing room between logo and text
-    display: 'inline-block',
-    verticalAlign: 'middle' // Keeps it centered with the letters
-  }} 
-/>
+                src="/rf-logo.svg" 
+                alt="RF" 
+                style={{ width: '32px', height: '32px', marginRight: '1px', display: 'inline-block', verticalAlign: 'middle' }} 
+              />
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span className="nav-logo-text" style={{ fontWeight: 900, fontSize: '20px', color: '#fff', letterSpacing: '-0.5px', lineHeight: '1' }}>ROTO<span style={{ color: '#4caf50' }}>FILTER</span></span>
                 <span className="nav-logo-subtext" style={{ fontSize: '10px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', lineHeight: '1' }}>Data Driving Dominance</span>
               </div>
             </div>
-            {/* NEW: Integrated Navigation Menu */}
-            <div className="desktop-nav-links" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+
+            {/* DESKTOP NAV LINKS (Hidden on Mobile) */}
+            <div className="desktop-nav-links" style={{ display: 'flex', gap: '6px', alignItems: 'center', marginLeft: '10px' }}>
               <a href="#" className="nav-link active">Filters</a>
               <a href="#" className="nav-link">Rosters</a>
               <a href="#" className="nav-link">Closers</a>
               <a href="#" className="nav-link">Prospects</a>
               <a href="#" className="nav-link">Community</a>
-              {/* --- INTEGRATED SYNC BUTTON --- */}
-              <div style={{ marginLeft: '20px', paddingLeft: '20px', borderLeft: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center' }}>
-                 <TeamSwitcher />
-              </div>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-             <button className="upgrade-btn" style={{ ...baseButtonStyle, background: isUserPaid ? 'rgba(255,255,255,0.1)' : '#fff', color: isUserPaid ? '#fff' : '#000', border: 'none', padding: '6px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 700 }}>
-               {isUserPaid ? '✔ Pro' : 'Upgrade'}
+{/* RIGHT SIDE: CONTROL CLUSTER (Always Visible) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+             
+             {/* 1. SYNC BUTTON (Now Dark Gray, less scary) */}
+             <button 
+               onClick={() => setIsSyncModalOpen(true)}
+               title="Sync League"
+               // Added a hover effect via standard CSS logic simulation
+               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4caf50'} // Green on hover
+               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#333'}    // Back to Dark
+               style={{
+                 width: '32px', height: '32px', borderRadius: '50%', border: 'none',
+                 background: '#333', color: 'white', // CHANGED FROM RED TO DARK GRAY
+                 display: 'flex', alignItems: 'center', justifyContent: 'center',
+                 cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                 flexShrink: 0,
+                 transition: 'background 0.2s' // Smooth color change
+               }}
+             >
+               <div style={{ transform: 'scale(0.8)' }}><Icons.Sync /></div>
              </button>
+
+             {/* 2. TEAM SWITCHER (The Icon Button) */}
+             <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                <TeamSwitcher />
+             </div>
+
+             {/* 3. PRO BADGE / UPGRADE BUTTON */}
+             <button 
+                className="upgrade-btn" 
+                style={{ 
+                  ...baseButtonStyle, 
+                  background: isUserPaid ? 'rgba(255,255,255,0.1)' : '#4caf50', 
+                  color: '#fff', 
+                  border: isUserPaid ? '1px solid #333' : 'none', 
+                  padding: '6px 12px', 
+                  borderRadius: '20px', 
+                  fontSize: '11px', 
+                  fontWeight: 800, 
+                  flexShrink: 0,
+                  boxShadow: isUserPaid ? 'none' : '0 2px 8px rgba(76, 175, 80, 0.4)'
+                }}
+             >
+               {isUserPaid ? '✔ PRO' : 'UPGRADE'}
+             </button>
+
+             {/* 4. USER INITIALS */}
              <UserMenu />
           </div>
+
         </div>
       </nav>
 
