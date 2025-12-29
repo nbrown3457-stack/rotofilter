@@ -610,9 +610,21 @@ if (leagueStatus === "rostered") {
     });
   }, [players, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange]);
 
-  const toggleStat = (key: StatKey) => {
-    if (selectedStatKeys.includes(key)) setSelectedStatKeys(prev => prev.filter(k => k !== key));
-    else { setSelectedStatKeys(prev => [...prev, key]); if (statThresholds[key] === undefined) setStatThresholds(prev => ({ ...prev, [key]: STATS[key].defaultValue })); }
+const toggleStat = (key: StatKey) => {
+    if (selectedStatKeys.includes(key)) {
+      // If turning OFF, remove it from list
+      setSelectedStatKeys(prev => prev.filter(k => k !== key));
+    } else { 
+      // If turning ON, add it to list
+      setSelectedStatKeys(prev => [...prev, key]); 
+      
+      // Look up the "Min" value in your new config and start there.
+      // This will be 0 for almost everything now, but -30 for Launch Angle, etc.
+      if (statThresholds[key] === undefined) {
+        const startValue = STATS[key].min ?? 0;
+        setStatThresholds(prev => ({ ...prev, [key]: startValue })); 
+      }
+    }
   };
 
   const TeamGrid = ({ teams }: { teams: readonly TeamAbbr[] }) => {
@@ -763,14 +775,46 @@ if (leagueStatus === "rostered") {
         </div>
       </nav>
 
-      {/* MOBILE FLOATING RESULTS */}
-      <div className="mobile-floating-bar">
+    {/* MOBILE STICKY BAR (New Layout) */}
+      <div style={{
+        position: 'sticky',
+        top: 0, 
+        zIndex: 100,
+        background: '#1b5e20', 
+        padding: '10px 12px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between', // Pushes items to Left, Center, Right
+        boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+        color: 'white',
+        marginBottom: '10px', // Adds space below so presets aren't squished
+      }}>
         {compareList.length > 0 ? (
-          <button onClick={() => setIsCompareOpen(true)} style={{ flex: 1, background: "#1b5e20", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 20, padding: "8px", fontWeight: 900, fontSize: 13, boxShadow: "0 4px 10px rgba(0,0,0,0.3)" }}>COMPARE ({compareList.length})</button>
+          <button onClick={() => setIsCompareOpen(true)} style={{ flex: 1, background: "#4caf50", color: "#fff", border: "none", borderRadius: 20, padding: "8px", fontWeight: 900, fontSize: 13, boxShadow: "0 2px 5px rgba(0,0,0,0.2)" }}>
+            VIEW COMPARISON ({compareList.length})
+          </button>
         ) : (
           <>
-            <div style={{ fontWeight: 900, fontSize: 13 }}>{filteredPlayers.length} Players</div>
-            <button onClick={scrollToResults} style={{ background: "white", color: "#1b5e20", border: "none", borderRadius: 20, padding: "6px 14px", fontWeight: 800, fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>Results ⬇</button>
+            {/* LEFT: Jump to Top */}
+            <button 
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '8px', color: 'white', padding: '6px 10px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
+            >
+              ⬆ Filters
+            </button>
+
+            {/* CENTER: Count */}
+            <div style={{ fontWeight: 900, fontSize: 14 }}>
+              {filteredPlayers.length} <span style={{opacity: 0.8, fontWeight: 400, fontSize: 12}}>Players</span>
+            </div>
+
+            {/* RIGHT: Jump to Results */}
+            <button 
+              onClick={scrollToResults} 
+              style={{ background: "white", color: "#1b5e20", border: "none", borderRadius: 20, padding: "6px 14px", fontWeight: 800, fontSize: 11, display: "flex", alignItems: "center", gap: 4, cursor: 'pointer' }}
+            >
+              Results ⬇
+            </button>
           </>
         )}
       </div>
@@ -916,30 +960,65 @@ if (leagueStatus === "rostered") {
                                   {isOpen && (
                                     <div style={{ padding: "12px", background: "#fafafa", display: "flex", flexDirection: "column", gap: "10px", borderTop: "1px solid #eee" }}>
                                       {CORE_STATS[group.id]?.map((sk) => {
-                                        const config = STATS[sk]; if (!config) return null; 
-                                        const isSelected = selectedStatKeys.includes(sk);
-                                        const isDisabled = config.isPaid && !isUserPaid;
-                                        const currentThreshold = statThresholds[sk] ?? config.defaultValue;
-                                        const bounds = getStatBounds(sk, config.unit);
-                                        return (
-                                          <div key={sk} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                            <button disabled={isDisabled} onClick={() => toggleStat(sk)} style={{ ...baseButtonStyle, textAlign: "left", padding: "10px 12px", opacity: isDisabled ? 0.6 : 1, background: isSelected ? BUTTON_DARK_GREEN : "#fff", color: isSelected ? "#fff" : "#333", borderColor: isDisabled ? "#e0e0e0" : (isSelected ? BUTTON_DARK_GREEN : "#ddd"), display: "flex", flexDirection: "column", gap: "2px" }}>
-                                              <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}><span style={{ fontWeight: 800, fontSize: "12px" }}>{config.label}</span>{config.isPaid && !isUserPaid && <span style={{ fontSize: "8px", background: "#ffebee", color: "#c62828", padding: "2px 6px", borderRadius: "4px", fontWeight: 900 }}>PRO</span>}</div>
-                                              <div style={{ fontSize: "10px", fontWeight: 400, opacity: isSelected ? 0.9 : 0.6 }}>{config.description}</div>
-                                            </button>
-                                            {isSelected && (
-                                              <div style={{ padding: "12px", background: "#fff", borderRadius: "10px", border: "1px solid " + BUTTON_DARK_GREEN, marginTop: "2px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
-                                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                                  <button onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold - bounds.step).toFixed(2)) })); }} style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "30px" }}>−</button>
-                                                  <input type="range" min={bounds.min} max={bounds.max} step={bounds.step} value={currentThreshold} onChange={(e) => setStatThresholds(p => ({ ...p, [sk]: Number(e.target.value) }))} style={{ flex: 1, accentColor: BUTTON_DARK_GREEN, cursor: "pointer" }} />
-                                                  <button onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold + bounds.step).toFixed(2)) })); }} style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "30px" }}>+</button>
-                                                </div>
-                                                <div style={{ textAlign: "center", marginTop: "8px", fontWeight: 900, color: BUTTON_DARK_GREEN, fontSize: "14px" }}>{config.goodDirection === "higher" ? "> " : "< "}{currentThreshold}{config.unit === "percent" ? "%" : ""}</div>
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
+  const config = STATS[sk]; if (!config) return null; 
+  const isSelected = selectedStatKeys.includes(sk);
+  const isDisabled = config.isPaid && !isUserPaid;
+  
+  // 1. DYNAMIC CONFIG: Read min/max/step directly from your new stats file
+  const minVal = config.min ?? 0;
+  const maxVal = config.max ?? 100;
+  const stepVal = config.step ?? 1;
+  
+  // 2. CURRENT VALUE: Default to the "Min" (0), not a generic number
+  const currentThreshold = statThresholds[sk] ?? minVal;
+
+  return (
+    <div key={sk} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+      <button disabled={isDisabled} onClick={() => toggleStat(sk)} style={{ ...baseButtonStyle, textAlign: "left", padding: "10px 12px", opacity: isDisabled ? 0.6 : 1, background: isSelected ? BUTTON_DARK_GREEN : "#fff", color: isSelected ? "#fff" : "#333", borderColor: isDisabled ? "#e0e0e0" : (isSelected ? BUTTON_DARK_GREEN : "#ddd"), display: "flex", flexDirection: "column", gap: "2px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+          <span style={{ fontWeight: 800, fontSize: "12px" }}>{config.label}</span>
+          {config.isPaid && !isUserPaid && <span style={{ fontSize: "8px", background: "#ffebee", color: "#c62828", padding: "2px 6px", borderRadius: "4px", fontWeight: 900 }}>PRO</span>}
+        </div>
+        <div style={{ fontSize: "10px", fontWeight: 400, opacity: isSelected ? 0.9 : 0.6 }}>{config.description}</div>
+      </button>
+      
+      {isSelected && (
+        <div style={{ padding: "12px", background: "#fff", borderRadius: "10px", border: "1px solid " + BUTTON_DARK_GREEN, marginTop: "2px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {/* MINUS BUTTON */}
+            <button 
+              onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold - stepVal).toFixed(3)) })); }} 
+              style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "30px" }}
+            >−</button>
+            
+            {/* SLIDER INPUT */}
+            <input 
+              type="range" 
+              min={minVal} 
+              max={maxVal} 
+              step={stepVal} 
+              value={currentThreshold} 
+              onChange={(e) => setStatThresholds(p => ({ ...p, [sk]: Number(e.target.value) }))} 
+              style={{ flex: 1, accentColor: BUTTON_DARK_GREEN, cursor: "pointer" }} 
+            />
+            
+            {/* PLUS BUTTON */}
+            <button 
+              onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold + stepVal).toFixed(3)) })); }} 
+              style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "30px" }}
+            >+</button>
+          </div>
+          
+          <div style={{ textAlign: "center", marginTop: "8px", fontWeight: 900, color: BUTTON_DARK_GREEN, fontSize: "14px" }}>
+            {config.goodDirection === "higher" ? "> " : "< "}
+            {currentThreshold}
+            {config.unit === "percent" ? "%" : ""}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+})}
                                     </div>
                                   )}
                                 </div>
