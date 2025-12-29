@@ -775,48 +775,26 @@ const toggleStat = (key: StatKey) => {
         </div>
       </nav>
 
-{/* MOBILE FLOATING RESULTS (Hidden on Desktop) */}
-      <div className="mobile-floating-bar flex items-center justify-between md:hidden" style={{
-        position: 'sticky',
-        top: '10px',
-        zIndex: 90,
-        margin: '0 12px 10px 12px',
-        background: '#1b5e20',
-        borderRadius: '50px',
-        padding: '8px 16px',
-        // Note: "display", "alignItems", and "justifyContent" moved to className above!
-        boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
-        color: 'white',
-      }}>
+{/* MOBILE FLOATING RESULTS */}
+
+      <div className="mobile-floating-bar">
+
         {compareList.length > 0 ? (
-          <button onClick={() => setIsCompareOpen(true)} style={{ flex: 1, background: "transparent", color: "#fff", border: "none", fontWeight: 900, fontSize: 13, textAlign: "center" }}>
-            VIEW COMPARISON ({compareList.length})
-          </button>
+
+          <button onClick={() => setIsCompareOpen(true)} style={{ flex: 1, background: "#1b5e20", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 20, padding: "8px", fontWeight: 900, fontSize: 13, boxShadow: "0 4px 10px rgba(0,0,0,0.3)" }}>COMPARE ({compareList.length})</button>
+
         ) : (
+
           <>
-            <div style={{ fontWeight: 900, fontSize: 13, textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}>
-              {filteredPlayers.length} Players
-            </div>
-            <button 
-              onClick={scrollToResults} 
-              style={{ 
-                background: "white", 
-                color: "#1b5e20", 
-                border: "none", 
-                borderRadius: 20, 
-                padding: "6px 14px", 
-                fontWeight: 800, 
-                fontSize: 11, 
-                display: "flex", 
-                alignItems: "center", 
-                gap: 4,
-                boxShadow: "0 2px 5px rgba(0,0,0,0.2)"
-              }}
-            >
-              Results ⬇
-            </button>
+
+            <div style={{ fontWeight: 900, fontSize: 13 }}>{filteredPlayers.length} Players</div>
+
+            <button onClick={scrollToResults} style={{ background: "white", color: "#1b5e20", border: "none", borderRadius: 20, padding: "6px 14px", fontWeight: 800, fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>Results ⬇</button>
+
           </>
+
         )}
+
       </div>
 
       {/* MOBILE BOTTOM NAV */}
