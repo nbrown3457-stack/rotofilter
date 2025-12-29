@@ -725,7 +725,17 @@ if (leagueStatus === "rostered") {
         <div style={{ maxWidth: 1600, margin: '0 auto', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
             <div onClick={handleGlobalReset} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '24px' }}>⚾</span>
+              <img 
+  src="/logo.svg" 
+  alt="Logo" 
+  style={{ 
+    width: '32px',       // A bit bigger than the 24px text to stand out
+    height: '32px', 
+    marginRight: '1px', // Adds breathing room between logo and text
+    display: 'inline-block',
+    verticalAlign: 'middle' // Keeps it centered with the letters
+  }} 
+/>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span className="nav-logo-text" style={{ fontWeight: 900, fontSize: '20px', color: '#fff', letterSpacing: '-0.5px', lineHeight: '1' }}>ROTO<span style={{ color: '#4caf50' }}>FILTER</span></span>
                 <span className="nav-logo-subtext" style={{ fontSize: '10px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', lineHeight: '1' }}>Data Driving Dominance</span>
