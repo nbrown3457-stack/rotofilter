@@ -224,7 +224,6 @@ const ToolLegend = () => (
 ============================================================================= */
 export default function Home() {
   const supabase = createClient();
-  const [isToolsOpen, setIsToolsOpen] = useState(false);
 
   // --- 1. STANDARD STATE ---
   const [players, setPlayers] = useState<any[]>([]);
@@ -754,78 +753,17 @@ const toggleStat = (key: StatKey) => {
                 <span className="nav-logo-subtext" style={{ fontSize: '10px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', lineHeight: '1' }}>Data Driving Dominance</span>
               </div>
             </div>
-        {/* DESKTOP NAVIGATION LINKS */}
-            <div className="desktop-nav-links" style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-              
-              <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('filters'); }} className={`nav-link ${activeTab === 'filters' ? 'active' : ''}`}>Filters</a>
-              <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('rosters'); }} className={`nav-link ${activeTab === 'rosters' ? 'active' : ''}`}>Rosters</a>
-              <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('community'); }} className={`nav-link ${activeTab === 'community' ? 'active' : ''}`}>Community</a>
-              
-              {/* TOOLS DROPDOWN (Hover to see secondary items) */}
-              <div className="relative group" style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center' }}>
-                <button 
-                  className={`nav-link ${['prospects', 'closers', 'grade', 'trade'].includes(activeTab) ? 'active' : ''}`} 
-                  style={{ 
-                    // RESET BUTTON DEFAULTS
-                    background: 'transparent', 
-                    border: 'none', 
-                    cursor: 'pointer', 
-                    
-                    // FORCE EXACT MATCHING TYPOGRAPHY
-                    fontFamily: 'inherit',      
-                    fontSize: '14px',           // Hardcoded to match standard nav links
-                    fontWeight: '700',          // FORCE BOLD (standard for nav links)
-                    textTransform: 'uppercase', // "TOOLS"
-                    letterSpacing: '0.05em',    // Adds that slight spacing your other links have
-                    
-                    // COLOR LOGIC (Brighter!)
-                    // If active: Green (#4ade80)
-                    // If inactive: #d1d5db (This is Tailwind's gray-300, much brighter than before)
-                    color: ['prospects', 'closers', 'grade', 'trade'].includes(activeTab) ? '#4ade80' : '#d1d5db',
-                    
-                    // LAYOUT
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '4px',
-                    transition: 'color 0.2s' // Smooth hover effect
-                  }}
-                  // Add a hover effect directly using inline events to mimic CSS classes
-                  onMouseEnter={(e) => { 
-                    if (!['prospects', 'closers', 'grade', 'trade'].includes(activeTab)) e.currentTarget.style.color = 'white'; 
-                  }}
-                  onMouseLeave={(e) => { 
-                    if (!['prospects', 'closers', 'grade', 'trade'].includes(activeTab)) e.currentTarget.style.color = '#d1d5db'; 
-                  }}
-                >
-                  TOOLS <span style={{ fontSize: '10px', opacity: 0.8 }}>▼</span>
-                </button>
-                
-                {/* The Desktop Dropdown Menu */}
-                <div className="absolute top-full left-0 mt-2 w-40 bg-white rounded shadow-xl hidden group-hover:block overflow-hidden" style={{ zIndex: 100, border: '1px solid #eee' }}>
-                  {[
-                    { id: 'prospects', label: 'Prospects' },
-                    { id: 'closers', label: 'Closers' },
-                    { id: 'grade', label: 'Grade' },
-                    { id: 'trade', label: 'Trade' }
-                  ].map((item) => (
-                    <a 
-                      key={item.id} 
-                      href="#" 
-                      onClick={(e) => { e.preventDefault(); setActiveTab(item.id); }} 
-                      className="block px-4 py-3 text-sm text-gray-800 hover:bg-green-50 hover:text-green-800" 
-                      style={{ textDecoration: 'none', borderBottom: '1px solid #f0f0f0' }}
-                    >
-                      {item.label}
-                    </a>
-                  ))}
-                </div>
-              </div>
-
-              {/* INTEGRATED SYNC BUTTON & TEAM SWITCHER */}
+            {/* NEW: Integrated Navigation Menu */}
+            <div className="desktop-nav-links" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <a href="#" className="nav-link active">Filters</a>
+              <a href="#" className="nav-link">Rosters</a>
+              <a href="#" className="nav-link">Closers</a>
+              <a href="#" className="nav-link">Prospects</a>
+              <a href="#" className="nav-link">Community</a>
+              {/* --- INTEGRATED SYNC BUTTON --- */}
               <div style={{ marginLeft: '20px', paddingLeft: '20px', borderLeft: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center' }}>
                  <TeamSwitcher />
               </div>
-
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -859,100 +797,11 @@ const toggleStat = (key: StatKey) => {
 
       </div>
 
-     {/* ==================================================================================
-          MOBILE NAVIGATION (Wrapped in md:hidden to ensure it NEVER shows on desktop)
-         ================================================================================== */}
-      <div className="md:hidden" style={{ position: 'relative', zIndex: 200 }}>
-
-        {/* 1. TOOLS DRAWER (Pops up when Tools is clicked) */}
-        {isToolsOpen && (
-          <div style={{
-            position: 'fixed',
-            bottom: '70px',
-            right: '80px', // Aligns roughly with the Tools button
-            background: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-            zIndex: 202,
-            minWidth: '150px',
-            border: '1px solid #eee',
-            overflow: 'hidden'
-          }}>
-            {[
-              { id: "prospects", label: "Prospects", Icon: Icons.Prospects },
-              { id: "closers", label: "Closers", Icon: Icons.Closers },
-              { id: "grade", label: "Grade", Icon: Icons.Grade },
-              { id: "trade", label: "Trade", Icon: Icons.Trade },
-            ].map((item) => (
-              <div 
-                key={item.id} 
-                onClick={(e) => { 
-                  e.preventDefault(); 
-                  setActiveTab(item.id); 
-                  setIsToolsOpen(false); 
-                }} 
-                style={{
-                  padding: '12px 16px',
-                  borderBottom: '1px solid #f5f5f5',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  color: activeTab === item.id ? '#1b5e20' : '#333',
-                  background: activeTab === item.id ? '#e8f5e9' : 'white'
-                }}
-              >
-                <item.Icon /> {item.label}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* 2. MAIN MOBILE BOTTOM BAR */}
-        <div className="mobile-bottom-nav" style={{ 
-            display: 'grid', 
-            gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', 
-            position: 'fixed', 
-            bottom: 0, 
-            left: 0, 
-            right: 0, 
-            paddingBottom: 'safe-area-inset-bottom',
-            height: '60px', 
-            background: 'white', 
-            borderTop: '1px solid #eee',
-            zIndex: 201
-        }}>
-          {/* A. FILTERS */}
-          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('filters'); setIsToolsOpen(false); }} className={`flex flex-col items-center justify-center ${activeTab === 'filters' ? "text-green-800 font-bold" : "text-gray-500"}`} style={{ textDecoration: 'none', fontSize: '10px', gap: '2px' }}>
-            <div style={{ transform: 'scale(1.2)' }}><Icons.Filters /></div><span>Filters</span>
-          </a>
-
-          {/* B. ROSTERS */}
-          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('rosters'); setIsToolsOpen(false); }} className={`flex flex-col items-center justify-center ${activeTab === 'rosters' ? "text-green-800 font-bold" : "text-gray-500"}`} style={{ textDecoration: 'none', fontSize: '10px', gap: '2px' }}>
-            <div style={{ transform: 'scale(1.2)' }}><Icons.Rosters /></div><span>Rosters</span>
-          </a>
-
-          {/* C. COMMUNITY */}
-          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('community'); setIsToolsOpen(false); }} className={`flex flex-col items-center justify-center ${activeTab === 'community' ? "text-green-800 font-bold" : "text-gray-500"}`} style={{ textDecoration: 'none', fontSize: '10px', gap: '2px' }}>
-            <div style={{ transform: 'scale(1.2)' }}><Icons.Community /></div><span>Community</span>
-          </a>
-
-          {/* D. TOOLS (Trigger) */}
-          <a href="#" onClick={(e) => { e.preventDefault(); setIsToolsOpen(!isToolsOpen); }} className={`flex flex-col items-center justify-center ${['prospects', 'closers', 'grade', 'trade'].includes(activeTab) ? "text-green-800 font-bold" : "text-gray-500"}`} style={{ textDecoration: 'none', fontSize: '10px', gap: '2px' }}>
-            <div style={{ transform: 'scale(1.2)' }}>
-               {/* Custom Wrench Icon */}
-               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-            </div>
-            <span>Tools</span>
-          </a>
-
-          {/* E. SYNC */}
-          <a href="#" onClick={(e) => { e.preventDefault(); setIsSyncModalOpen(true); setIsToolsOpen(false); }} className="flex flex-col items-center justify-center text-gray-500" style={{ textDecoration: 'none', fontSize: '10px', gap: '2px' }}>
-            <div style={{ transform: 'scale(1.2)' }}><Icons.Sync /></div><span>Sync</span>
-          </a>
-        </div>
+      {/* MOBILE BOTTOM NAV */}
+      <div className="mobile-bottom-nav">
+        {[{ id: "filters", label: "Filters", Icon: Icons.Filters }, { id: "rosters", label: "Rosters", Icon: Icons.Rosters }, { id: "closers", label: "Closers", Icon: Icons.Closers }, { id: "prospects", label: "Prospects", Icon: Icons.Prospects }, { id: "grade", label: "Grade", Icon: Icons.Grade }, { id: "trade", label: "Trade", Icon: Icons.Trade }, { id: "community", label: "Community", Icon: Icons.Community }, { id: "sync", label: "Sync", Icon: Icons.Sync }].map((item) => (
+          <a key={item.id} href="#" onClick={(e) => { e.preventDefault(); setActiveTab(item.id); if(item.id === 'sync') setIsSyncModalOpen(true); }} className={`mobile-nav-item ${activeTab === item.id ? "active" : ""}`}><item.Icon />{item.label}</a>
+        ))}
       </div>
 
       {/* MAIN CONTAINER FIXED FOR WHITE BORDER ISSUE */}
