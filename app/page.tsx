@@ -5,15 +5,13 @@ import { createClient } from "@/app/utils/supabase/client";
 /* =============================================================================
    SECTION 0 — Imports
 ============================================================================= */
-//test note on 12/28 after crash
-
 // 1. GO UP ONE LEVEL (..) to find components
 import { PlayerDetailPopup } from "../components/PlayerDetailPopup";
 import { PlayerNewsFeed } from "../components/PlayerNewsFeed";
 import LeagueSyncModal from "../components/LeagueSyncModal"; 
 import { Icons } from "../components/Icons"; 
 import { UserMenu } from "../components/UserMenu"; 
-import TeamSwitcher from "../components/TeamSwitcher"; // NEW: League Integration
+import TeamSwitcher from "../components/TeamSwitcher"; 
 import { useTeam } from '../context/TeamContext';
 
 // 2. GO UP ONE LEVEL (..) to find config
@@ -28,13 +26,11 @@ import {
   toTitleCase, 
   getTools, 
   getTrajectory, 
-  getStatBounds, 
   enrichPlayerData,
   type DateRangeOption 
 } from "./utils/playerAnalysis";
 
 // 4. Standard Libraries
-import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 
 const PulseStyles = () => (
@@ -66,7 +62,18 @@ const PulseStyles = () => (
     .mobile-floating-bar { display: none; }
     .desktop-nav-links { display: flex; }
     .mobile-bottom-nav { display: none; }
+    
+    /* SCROLLBAR HIDING FOR CLEAN LOOK */
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none;  scrollbar-width: none; }
+
+    /* LAYOUT OVERRIDES */
+    .wide-container { width: 98%; max-width: 2500px; margin: 0 auto; }
+    .main-padding { padding: 8px; }
+
     @media (max-width: 768px) {
+      .wide-container { width: 99.5%; } 
+      .main-padding { padding: 4px !important; }
       .desktop-nav-links { display: none !important; }
       .mobile-floating-bar { display: flex; position: fixed; top: 64px; left: 0; right: 0; z-index: 90; background: rgba(27, 94, 32, 0.95); backdrop-filter: blur(8px); padding: 10px 20px; align-items: center; justify-content: space-between; color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); animation: slideDown 0.3s ease-out; }
       @keyframes slideDown { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -80,18 +87,27 @@ const PulseStyles = () => (
     * { box-sizing: border-box; }
     html, body { overflow-x: hidden; width: 100%; margin: 0; padding: 0; }
     @media (max-width: 600px) {
-      .upgrade-btn {
-        padding: 4px 10px !important;
-        font-size: 10px !important;
-        border-radius: 12px !important;
-      }
-      .nav-logo-text {
-        font-size: 16px !important;
-      }
-      .nav-logo-subtext {
-        display: none; /* Hide the tagline on tiny screens to save space */
-      }
+      .upgrade-btn { padding: 4px 10px !important; font-size: 10px !important; border-radius: 12px !important; }
+      .nav-logo-text { font-size: 16px !important; }
+      .nav-logo-subtext { display: none; }
     }
+    
+    .filter-dropdown-content {
+       position: absolute;
+       top: 110%;
+       left: 0;
+       width: 320px;
+       max-height: 500px;
+       overflow-y: auto;
+       background: white;
+       border-radius: 12px;
+       box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+       border: 1px solid #eee;
+       padding: 12px;
+       z-index: 1000;
+       animation: fadeIn 0.15s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
   `}} />
 );
 
@@ -102,7 +118,6 @@ type BatterPos = "C" | "1B" | "2B" | "3B" | "SS" | "OF" | "DH";
 type PitcherPos = "SP" | "RP";
 type Position = BatterPos | PitcherPos | "batters" | "pitchers";
 type Level = "all" | "mlb" | "prospects";
-// Added "my_team" so we can distinguish between "My Guys" and "All Taken Players"
 type LeagueStatus = "all" | "available" | "rostered" | "my_team";
 type FilterTab = "recommended" | "expert" | "my_filters";
 type StatViewMode = "actual" | "pace";
@@ -130,7 +145,6 @@ const BUTTON_DARK_GREEN = "#1b5e20";
 const BUTTON_DYNASTY_PURPLE = "#6a1b9a"; 
 const BUTTON_RANGE_ORANGE = "#e65100";
 
-// UPDATED: Complete list of stats to prevent "Ghost Zeros"
 const BATTER_STATS = [
   'hr', 'rbi', 'sb', 'avg', 'ops', 'obp', 'slg', 'iso', 'wrc_plus',
   'xwoba', 'xba', 'xslg', 'woba', 'savant_ba', 'savant_slg', 'xwoba_con',
@@ -146,8 +160,9 @@ const PITCHER_STATS = [
   'xera', 'xba_allowed', 'xslg_allowed', 'xwoba_allowed', 'clutch_xwoba',
   'velocity', 'spin_rate', 'ivb', 'h_break', 'vert_break', 'spin_axis', 
   'extension', 'release_point_xyz', 'putaway_pct', 'gb_pct_pitch', 'xwoba_pitch',
-  'arm_value', 'arm_strength', 'fielding_runs' // (Fielding can be both, but often relevant here)
+  'arm_value', 'arm_strength', 'fielding_runs' 
 ];
+
 /* =============================================================================
    SECTION 3 — Sub-Components
 ============================================================================= */
@@ -172,18 +187,6 @@ const cardStyle: React.CSSProperties = {
 };
 const labelStyle: React.CSSProperties = { fontWeight: 800, fontSize: 10, color: "#666", textTransform: "uppercase", letterSpacing: "0.8px" };
 
-const CardHeader = ({ title, onClear, onToggle, isCollapsed, isActive }: any) => (
-  <div onClick={onToggle} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <div style={labelStyle}>{title}</div>
-      {isCollapsed && isActive && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#4caf50", boxShadow: "0 0 4px #4caf50" }} />}
-    </div>
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      {!isCollapsed && <button onClick={onClear} style={{...clearButtonStyle, fontSize: 9, padding: "2px 6px"}}>Reset</button>}
-      <div style={{ color: "#999" }}>{isCollapsed ? <Icons.ChevronDown /> : <Icons.ChevronUp />}</div>
-    </div>
-  </div>
-);
 
 const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline, availability }: any) => {
   const teamColor = TEAM_PRIMARY[team as TeamAbbr] || "#444";
@@ -194,7 +197,6 @@ const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline, availability }: a
         <span style={{ color: "#fff", fontSize: "14px", fontWeight: 900, fontFamily: "ui-monospace, monospace", position: 'relative', zIndex: 2, textShadow: "1px 1px 2px rgba(0,0,0,0.4)" }}>{jerseyNumber || "--"}</span>
       </div>
       {hasNews && <div className="news-pulse" />}
-      {/* NEW: Visual ownership indicator (green dot) */}
       {availability === 'MY_TEAM' && (
         <div style={{ position: 'absolute', top: -2, left: -2, width: 10, height: 10, background: '#4caf50', borderRadius: '50%', border: '2px solid white', zIndex: 10 }} />
       )}
@@ -211,7 +213,6 @@ const ToolLegend = () => (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#2196f3", background: "#e3f2fd", padding: "2px 6px", borderRadius: 4 }}>S</span><span style={{ fontSize: 10, color: "#555" }}>Speed (Spd &gt; 28)</span></div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#ff9800", background: "#fff3e0", padding: "2px 6px", borderRadius: 4 }}>D</span><span style={{ fontSize: 10, color: "#555" }}>Disc (BB% &gt; 10)</span></div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#9c27b0", background: "#f3e5f5", padding: "2px 6px", borderRadius: 4 }}>C</span><span style={{ fontSize: 10, color: "#555" }}>Context (OPS &gt; .800)</span></div>
-    {/* NEW: Season Anchor Legend Entry */}
     <div style={{ display: "flex", alignItems: "center", gap: 6, borderLeft: "1px solid #ddd", paddingLeft: 12, marginLeft: 6 }}>
         <span style={{ fontSize: 9, fontWeight: 900, color: '#999', border: '1px solid #ccc', borderRadius: '50%', width: '14px', height: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>S</span>
         <span style={{ fontSize: 10, color: "#555" }}>Season Anchor</span>
@@ -234,20 +235,15 @@ export default function Home() {
   const [customEnd, setCustomEnd] = useState("");
   const [compareList, setCompareList] = useState<string[]>([]);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
-  const [orderedCores, setOrderedCores] = useState<{ id: CoreId; label: string }[]>([...CORES]);
-  const [openGroup, setOpenGroup] = useState<CoreId | null>(null);
+  const [openGroup, setOpenGroup] = useState<CoreId | null>(null); // Reused for Dropdown menus
   const [isUserPaid, setIsUserPaid] = useState(true); 
   const [isMounted, setIsMounted] = useState(false);
   const resultsTableRef = useRef<HTMLDivElement>(null);
   const [sections, setSections] = useState({ league: true, positions: true, al: true, nl: true });
     
   // --- 2. NEW TEAM CONTEXT & FILTER STATE ---
-  const { activeTeam } = useTeam(); // <--- CONNECTS TO THE BRAIN
-  // --- HELPER: Identify Season-Locked Stats ---
-  // If a stat is NOT in "Standard Hitting" or "Standard Pitching", it comes from Savant
-  // and is currently locked to the full season.
+  const { activeTeam } = useTeam();
   const isSeasonLocked = (key: string) => {
-    // We cast to 'any' to avoid strict type checks on the config import for now
     const isStandardHit = CORE_STATS.std_hit?.includes(key as any);
     const isStandardPitch = CORE_STATS.std_pitch?.includes(key as any);
     return !isStandardHit && !isStandardPitch;
@@ -262,7 +258,7 @@ export default function Home() {
   const [level, setLevel] = useState<Level>("all");
   const [leagueStatus, setLeagueStatus] = useState<LeagueStatus>("all");
   const [selectedTeams, setSelectedTeams] = useState<TeamAbbr[]>([...ALL_TEAMS]);
-  const [searchQuery, setSearchQuery] = useState(""); // (Note: We use 'search' for API, this might be redundant but safe to keep for now)
+  const [searchQuery, setSearchQuery] = useState("");
   const [sortKey, setSortKey] = useState<string | null>("rotoScore"); 
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [statThresholds, setStatThresholds] = useState<Record<string, number>>({});
@@ -286,7 +282,7 @@ export default function Home() {
     }
   }, []);
 
-// --- 5. AUTH & FILTERS LOAD (Now with Logout Cleaner) ---
+// --- 5. AUTH & FILTERS LOAD ---
   const fetchSavedFilters = async (currentUser: any) => {
     if (!currentUser) return; 
     const { data, error } = await supabase.from('saved_filters').select('*').order('created_at', { ascending: false });
@@ -297,44 +293,25 @@ export default function Home() {
   };
 
 useEffect(() => {
-    // Check initial session
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-      
-      // --- LIFT OFF UPDATE: FORCE UNLOCK ---
       setIsUserPaid(true); 
-      // Original Logic (Saved for later):
-      // if (currentUser?.user_metadata?.is_paid) setIsUserPaid(true);
-      // -------------------------------------
-
       if (currentUser) fetchSavedFilters(currentUser); 
     };
     checkUser();
 
-    // Listen for changes (Login / Logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-      
-      // --- LIFT OFF UPDATE: FORCE UNLOCK ---
       setIsUserPaid(true);
-      // Original Logic (Saved for later):
-      // if (currentUser?.user_metadata?.is_paid) setIsUserPaid(true);
-      // else setIsUserPaid(false);
-      // -------------------------------------
       
-      // Handle Data Load vs. Cleanup
       if (currentUser) {
         fetchSavedFilters(currentUser); 
       } else {
-        // --- LOGOUT DETECTED: WIPE THE MEMORY ---
-        // This forces the "Viewing: Team" to reset to default
         document.cookie = "active_team_key=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
         document.cookie = "active_league_key=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
-        
-        // Restore local defaults
         const saved = localStorage.getItem('rotofilter_presets');
         if (saved) setSavedFilters(JSON.parse(saved));
         else setSavedFilters([]);
@@ -344,7 +321,6 @@ useEffect(() => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // --- 6. HANDLE SYNC SUCCESS (Simplified) ---
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const syncStatus = params.get('sync');
@@ -353,7 +329,6 @@ useEffect(() => {
     if (syncStatus === 'success') {
       setIsSyncModalOpen(true);
       window.history.replaceState({}, '', window.location.pathname);
-      // Note: We don't need to manually fetch teams here anymore; Context handles it on reload.
     } else if (syncStatus === 'error') {
       alert(`Yahoo Connection Failed: ${decodeURIComponent(errorMsg || "Unknown error")}`);
       window.history.replaceState({}, '', window.location.pathname);
@@ -365,50 +340,36 @@ useEffect(() => {
     const saved = localStorage.getItem('rotofilter_presets');
     if (saved) setSavedFilters(JSON.parse(saved));
   }, []);
-  // ----------------------------------------
 
-  // --- UPDATED FETCH PLAYERS (With My Team Filter & Safety Timeout) ---
+  // --- UPDATED FETCH PLAYERS ---
   const fetchPlayers = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-
-      // 1. CONTEXT: Always send League & Team Key if they exist
-      // This allows the backend to tag players as 'MY_TEAM' vs 'ROSTERED' vs 'AVAILABLE'
-      // without filtering them out of the list immediately.
       if (activeTeam) {
           params.append('league_id', activeTeam.league_key);
           params.append('team_id', activeTeam.team_key);
       }
-
-      // 2. Handle Search
       if (search) params.append('search', search);
-
-      // 3. Handle Date Ranges 
       if (dateRange !== 'custom') {
-         const rangeValue = dateRange === 'pace_season' ? 'season_curr' : dateRange;
-         params.append('range', rangeValue);
+          const rangeValue = dateRange === 'pace_season' ? 'season_curr' : dateRange;
+          params.append('range', rangeValue);
       } else {
-         if (customStart) params.append('start_date', customStart);
-         if (customEnd) params.append('end_date', customEnd);
+          if (customStart) params.append('start_date', customStart);
+          if (customEnd) params.append('end_date', customEnd);
       }
-      
-      // 4. Handle Positions
       if (selectedPositions.length > 0 && !selectedPositions.includes('All')) {
         params.append('position', selectedPositions.join(','));
       }
       
-      // 5. The Fetch (with a built-in 8-second safety timeout)
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
-      
       const response = await fetch(`/api/players?${params.toString()}`, { signal: controller.signal });
       clearTimeout(timeoutId);
 
       if (!response.ok) throw new Error('Failed to fetch players');
       
       const data = await response.json();
-      // "Handshake Fix": Check if data IS the array, or if it HAS a .players property
       const safeList = Array.isArray(data) ? data : (data.players || []);
       setPlayers(safeList); 
       
@@ -420,9 +381,7 @@ useEffect(() => {
     }
   }, [leagueScope, activeTeam, search, dateRange, customStart, customEnd, selectedPositions]); 
 
-  // --- TRIGGER FETCH ON FILTER CHANGE ---
   useEffect(() => {
-    // Only fetch if we aren't partially through selecting custom dates
     if (dateRange !== 'custom' || (customStart && customEnd)) {
       fetchPlayers();
     }
@@ -436,13 +395,6 @@ useEffect(() => {
   };
 
   const toggleSection = (key: keyof typeof sections) => setSections(prev => ({ ...prev, [key]: !prev[key] }));
-  const onDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-    const items = Array.from(orderedCores);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-    setOrderedCores(items);
-  };
 
   const handleGlobalReset = () => {
     setOpenGroup(null); setSelectedPositions([]); setSelectedStatKeys([]); setLevel("all"); setLeagueStatus("all");
@@ -485,20 +437,9 @@ useEffect(() => {
     };
 
     if (user) {
-      const { error } = await supabase
-        .from('saved_filters')
-        .insert({
-          user_id: user.id,
-          name: name,
-          config: newFilterConfig
-        });
-
-      if (error) {
-        alert("Error saving to cloud: " + error.message);
-      } else {
-        alert("Saved to Cloud! ☁️");
-        fetchSavedFilters(user); 
-      }
+      const { error } = await supabase.from('saved_filters').insert({ user_id: user.id, name: name, config: newFilterConfig });
+      if (error) { alert("Error saving to cloud: " + error.message); } 
+      else { alert("Saved to Cloud! ☁️"); fetchSavedFilters(user); }
     } 
     else {
       const newFilter = { id: Date.now(), name, ...newFilterConfig };
@@ -530,41 +471,23 @@ useEffect(() => {
     else { setSortKey(key); setSortDir("desc"); }
   };
 
-  // 🔥 UPDATED FILTERING LOGIC: Uses availability data from the backend API
   const filteredPlayers = useMemo(() => {
     const scoredData = players.map((p: any) => enrichPlayerData(p, dateRange));
 
     return scoredData.filter((p: any) => {
-      // --- SMART ISOLATION: Auto-hide batters if looking at Pitching Stats ---
     const hasPitchingStats = selectedStatKeys.some(k => PITCHER_STATS.includes(k));
     const hasBattingStats = selectedStatKeys.some(k => BATTER_STATS.includes(k));
 
-    // If I selected "Velocity" (Pitching) but NOT "Home Runs" (Batting), hide Batters.
     if (hasPitchingStats && !hasBattingStats) {
       if (p.type !== 'pitcher' && p.position !== 'P' && p.position !== 'SP' && p.position !== 'RP') return false;
     }
-    
-    // If I selected "Exit Velo" (Batting) but NOT "ERA" (Pitching), hide Pitchers.
     if (hasBattingStats && !hasPitchingStats) {
       if (p.type === 'pitcher' || ['SP', 'RP', 'P'].includes(p.position)) return false;
     }
-    // -----------------------------------------------------------------------
-    
-      // 1. LEAGUE STATUS FILTERS
-// "Available" = Not owned by anyone (Free Agents)
-if (leagueStatus === "available") {
-    if (p.availability !== "AVAILABLE") return false;
-}
-
-// "My Team" = Only players on YOUR roster
-if (leagueStatus === "my_team") {
-    if (p.availability !== "MY_TEAM") return false;
-}
-
-// "Rostered" = Players owned by YOU or OPPONENTS (Anyone taken)
-if (leagueStatus === "rostered") {
-    if (p.availability !== "MY_TEAM" && p.availability !== "ROSTERED") return false;
-}
+      
+    if (leagueStatus === "available") { if (p.availability !== "AVAILABLE") return false; }
+    if (leagueStatus === "my_team") { if (p.availability !== "MY_TEAM") return false; }
+    if (leagueStatus === "rostered") { if (p.availability !== "MY_TEAM" && p.availability !== "ROSTERED") return false; }
 
       if (selectedPositions.length > 0 && !selectedPositions.includes(p.position as Position)) return false;
       if (level !== "all" && p.level !== level) return false;
@@ -583,43 +506,27 @@ if (leagueStatus === "rostered") {
       return true;
     }).sort((a: any, b: any) => {
       if (!sortKey) return 0;
-      
-      // 1. Get Values
       let valA = sortKey.includes('Score') ? a[sortKey] : parseFloat(a.stats[sortKey] || 0);
       let valB = sortKey.includes('Score') ? b[sortKey] : parseFloat(b.stats[sortKey] || 0);
       
-      // 2. QUALIFIER CHECK (The Magic Fix)
-      // Only apply this penalty if we are sorting by a Rate Stat
       const rateStats = ['avg', 'obp', 'slg', 'ops', 'era', 'whip', 'k_pct', 'bb_pct', 'xwoba', 'hard_hit_pct'];
       if (rateStats.includes(sortKey)) {
-          // Define Thresholds (Lower for Last 7 Days)
           const minPA = dateRange === 'last_7' ? 5 : 25;
           const minIP = dateRange === 'last_7' ? 2 : 10;
-          
           const aQualified = (a.type === 'pitcher' || ['SP','RP','P'].includes(a.position)) ? (a.stats.ip || 0) >= minIP : (a.stats.pa || 0) >= minPA;
           const bQualified = (b.type === 'pitcher' || ['SP','RP','P'].includes(b.position)) ? (b.stats.ip || 0) >= minIP : (b.stats.pa || 0) >= minPA;
-
-          // Always push Qualified players to the top (-1), regardless of sort direction
-          // This ensures that when you sort by OPS, you see Judge/Soto, not the 1-for-1 rookie.
           if (aQualified && !bQualified) return -1;
           if (!aQualified && bQualified) return 1;
       }
-
-      // 3. Standard Sort for everyone else
       return sortDir === "asc" ? valA - valB : valB - valA;
     });
   }, [players, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange]);
 
 const toggleStat = (key: StatKey) => {
     if (selectedStatKeys.includes(key)) {
-      // If turning OFF, remove it from list
       setSelectedStatKeys(prev => prev.filter(k => k !== key));
     } else { 
-      // If turning ON, add it to list
       setSelectedStatKeys(prev => [...prev, key]); 
-      
-      // Look up the "Min" value in your new config and start there.
-      // This will be 0 for almost everything now, but -30 for Launch Angle, etc.
       if (statThresholds[key] === undefined) {
         const startValue = STATS[key].min ?? 0;
         setStatThresholds(prev => ({ ...prev, [key]: startValue })); 
@@ -627,20 +534,27 @@ const toggleStat = (key: StatKey) => {
     }
   };
 
-  const TeamGrid = ({ teams }: { teams: readonly TeamAbbr[] }) => {
-    const isAllSelected = teams.every(t => selectedTeams.includes(t));
+  const TeamScrollRow = () => {
+    const isAllSelected = ALL_TEAMS.every(t => selectedTeams.includes(t));
     const toggleAll = () => {
-      if (isAllSelected) setSelectedTeams(prev => prev.filter(t => !teams.includes(t)));
-      else setSelectedTeams(prev => [...new Set([...prev, ...teams])]);
+        if (isAllSelected) setSelectedTeams([]);
+        else setSelectedTeams([...ALL_TEAMS]);
     };
+    
     return (
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(32px, 1fr))", gap: 6 }}>
-        <button onClick={toggleAll} style={{ width: 32, height: 32, borderRadius: "50%", border: `2px solid ${isAllSelected ? BUTTON_DARK_GREEN : "#ddd"}`, fontSize: 9, fontWeight: 900, background: isAllSelected ? BUTTON_DARK_GREEN : "#fff", color: isAllSelected ? "#fff" : "#999", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>ALL</button>
-        {teams.map(t => {
-          const isSel = selectedTeams.includes(t);
-          return <button key={t} onClick={() => setSelectedTeams(prev => isSel ? prev.filter(x => x !== t) : [...prev, t])} style={{ width: 32, height: 32, borderRadius: "50%", border: "2px solid " + TEAM_PRIMARY[t], fontSize: 9, fontWeight: 900, background: isSel ? TEAM_PRIMARY[t] : "#fff", color: isSel ? "#fff" : TEAM_PRIMARY[t], cursor: "pointer" }}>{t}</button>;
-        })}
-      </div>
+        <div className="hide-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, alignItems: "center", width: "100%" }}>
+            <div style={{ flexShrink: 0, fontSize: 10, fontWeight: 900, color: "#999", marginRight: 4 }}>TEAMS:</div>
+            <button onClick={toggleAll} style={{ flexShrink: 0, width: 28, height: 28, borderRadius: "50%", border: `2px solid ${isAllSelected ? BUTTON_DARK_GREEN : "#ddd"}`, fontSize: 9, fontWeight: 900, background: isAllSelected ? BUTTON_DARK_GREEN : "#fff", color: isAllSelected ? "#fff" : "#999", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>ALL</button>
+            <div style={{ width: 1, height: 20, background: "#eee", flexShrink: 0, margin: "0 4px" }} />
+            {ALL_TEAMS.map(t => {
+                const isSel = selectedTeams.includes(t);
+                return (
+                    <button key={t} onClick={() => setSelectedTeams(prev => isSel ? prev.filter(x => x !== t) : [...prev, t])} style={{ flexShrink: 0, width: 28, height: 28, borderRadius: "50%", border: "2px solid " + TEAM_PRIMARY[t], fontSize: 9, fontWeight: 900, background: isSel ? TEAM_PRIMARY[t] : "#fff", color: isSel ? "#fff" : TEAM_PRIMARY[t], cursor: "pointer", transition: "all 0.1s" }}>
+                        {t}
+                    </button>
+                );
+            })}
+        </div>
     );
   };
 
@@ -721,41 +635,18 @@ const toggleStat = (key: StatKey) => {
       <div className="beta-banner">BETA • v1.2 • Dec 2025</div>
       {renderCompareModal()}
       
-  {/* ==============================================================================
-          TOP NAVIGATION: CONTROL CLUSTER EDITION
-          Matches Desktop & Mobile: Logo on Left | Controls on Right
-         ============================================================================== */}
-      <nav style={{ 
-        position: 'sticky', 
-        top: 0, 
-        zIndex: 99999, 
-        background: '#1a1a1a', 
-        borderBottom: '1px solid #333', 
-        height: '64px', 
-        display: 'flex', 
-        alignItems: 'center', 
-        padding: '0 12px', 
-        boxShadow: '0 4px 20px rgba(0,0,0,0.5)' 
-      }}>
-        <div style={{ width: '100%', maxWidth: 1600, margin: '0 auto', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* TOP NAVIGATION */}
+      <nav style={{ position: 'sticky', top: 0, zIndex: 99999, background: '#1a1a1a', borderBottom: '1px solid #333', height: '64px', display: 'flex', alignItems: 'center', padding: '0 12px', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+        <div className="wide-container" style={{ height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           
-          {/* LEFT SIDE: LOGO & DESKTOP LINKS */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            
-            {/* LOGO */}
             <div onClick={handleGlobalReset} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <img 
-                src="/rf-logo.svg" 
-                alt="RF" 
-                style={{ width: '32px', height: '32px', marginRight: '1px', display: 'inline-block', verticalAlign: 'middle' }} 
-              />
+              <img src="/rf-logo.svg" alt="RF" style={{ width: '32px', height: '32px', marginRight: '1px', display: 'inline-block', verticalAlign: 'middle' }} />
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span className="nav-logo-text" style={{ fontWeight: 900, fontSize: '20px', color: '#fff', letterSpacing: '-0.5px', lineHeight: '1' }}>ROTO<span style={{ color: '#4caf50' }}>FILTER</span></span>
                 <span className="nav-logo-subtext" style={{ fontSize: '10px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', lineHeight: '1' }}>Data Driving Dominance</span>
               </div>
             </div>
-
-            {/* DESKTOP NAV LINKS (Hidden on Mobile) */}
             <div className="desktop-nav-links" style={{ display: 'flex', gap: '6px', alignItems: 'center', marginLeft: '10px' }}>
               <a href="#" className="nav-link active">Filters</a>
               <a href="#" className="nav-link">Rosters</a>
@@ -764,100 +655,36 @@ const toggleStat = (key: StatKey) => {
               <a href="#" className="nav-link">Community</a>
             </div>
           </div>
-{/* RIGHT SIDE: CONTROL CLUSTER (Always Visible) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-             
-             {/* 1. SYNC BUTTON (Now Dark Gray, less scary) */}
-             <button 
-               onClick={() => setIsSyncModalOpen(true)}
-               title="Sync League"
-               // Added a hover effect via standard CSS logic simulation
-               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4caf50'} // Green on hover
-               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#333'}    // Back to Dark
-               style={{
-                 width: '32px', height: '32px', borderRadius: '50%', border: 'none',
-                 background: '#333', color: 'white', // CHANGED FROM RED TO DARK GRAY
-                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                 cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-                 flexShrink: 0,
-                 transition: 'background 0.2s' // Smooth color change
-               }}
-             >
-               <div style={{ transform: 'scale(0.8)' }}><Icons.Sync /></div>
-             </button>
-
-             {/* 2. TEAM SWITCHER (The Icon Button) */}
-             <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                <TeamSwitcher />
-             </div>
-
-             {/* 3. PRO BADGE / UPGRADE BUTTON */}
-             <button 
-                className="upgrade-btn" 
-                style={{ 
-                  ...baseButtonStyle, 
-                  background: isUserPaid ? 'rgba(255,255,255,0.1)' : '#4caf50', 
-                  color: '#fff', 
-                  border: isUserPaid ? '1px solid #333' : 'none', 
-                  padding: '6px 12px', 
-                  borderRadius: '20px', 
-                  fontSize: '11px', 
-                  fontWeight: 800, 
-                  flexShrink: 0,
-                  boxShadow: isUserPaid ? 'none' : '0 2px 8px rgba(76, 175, 80, 0.4)'
-                }}
-             >
-               {isUserPaid ? '✔ PRO' : 'UPGRADE'}
-             </button>
-
-             {/* 4. USER INITIALS */}
-             <UserMenu />
+              <button onClick={() => setIsSyncModalOpen(true)} title="Sync League" onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4caf50'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#333'} style={{ width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: '#333', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.3)', flexShrink: 0, transition: 'background 0.2s' }}>
+                <div style={{ transform: 'scale(0.8)' }}><Icons.Sync /></div>
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}><TeamSwitcher /></div>
+              <button className="upgrade-btn" style={{ ...baseButtonStyle, background: isUserPaid ? 'rgba(255,255,255,0.1)' : '#4caf50', color: '#fff', border: isUserPaid ? '1px solid #333' : 'none', padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, flexShrink: 0, boxShadow: isUserPaid ? 'none' : '0 2px 8px rgba(76, 175, 80, 0.4)' }}>{isUserPaid ? '✔ PRO' : 'UPGRADE'}</button>
+              <UserMenu />
           </div>
-
         </div>
       </nav>
 
-{/* MOBILE FLOATING RESULTS */}
-
+      {/* MOBILE FLOATING RESULTS */}
       <div className="mobile-floating-bar">
-
         {compareList.length > 0 ? (
-
           <button onClick={() => setIsCompareOpen(true)} style={{ flex: 1, background: "#1b5e20", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 20, padding: "8px", fontWeight: 900, fontSize: 13, boxShadow: "0 4px 10px rgba(0,0,0,0.3)" }}>COMPARE ({compareList.length})</button>
-
         ) : (
-
           <>
-
             <div style={{ fontWeight: 900, fontSize: 13 }}>{filteredPlayers.length} Players</div>
-
             <button onClick={scrollToResults} style={{ background: "white", color: "#1b5e20", border: "none", borderRadius: 20, padding: "6px 14px", fontWeight: 800, fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>Results ⬇</button>
-
           </>
-
         )}
-
       </div>
 
-      {/* MOBILE BOTTOM NAV */}
       <div className="mobile-bottom-nav">
         {[{ id: "filters", label: "Filters", Icon: Icons.Filters }, { id: "rosters", label: "Rosters", Icon: Icons.Rosters }, { id: "closers", label: "Closers", Icon: Icons.Closers }, { id: "prospects", label: "Prospects", Icon: Icons.Prospects }, { id: "grade", label: "Grade", Icon: Icons.Grade }, { id: "trade", label: "Trade", Icon: Icons.Trade }, { id: "community", label: "Community", Icon: Icons.Community }, { id: "sync", label: "Sync", Icon: Icons.Sync }].map((item) => (
           <a key={item.id} href="#" onClick={(e) => { e.preventDefault(); setActiveTab(item.id); if(item.id === 'sync') setIsSyncModalOpen(true); }} className={`mobile-nav-item ${activeTab === item.id ? "active" : ""}`}><item.Icon />{item.label}</a>
         ))}
       </div>
 
-      {/* MAIN CONTAINER FIXED FOR WHITE BORDER ISSUE */}
-      <main style={{ 
-  padding: "24px", 
-  maxWidth: "100%", /* Allow it to fill the screen */
-  width: "1600px", /* Target width */
-  margin: "0 auto", 
-  fontFamily: "system-ui", 
-  flex: "1 0 auto", 
-  display: "flex", 
-  flexDirection: "column",
-  background: "transparent" /* Remove any white background on the container itself */
-}}>
+      <main className="wide-container main-padding" style={{ fontFamily: "system-ui", flex: "1 0 auto", display: "flex", flexDirection: "column", background: "transparent" }}>
         
         {/* PRESET TABS */}
         <div style={{ marginBottom: 24, marginTop: 24 }}>
@@ -893,171 +720,151 @@ const toggleStat = (key: StatKey) => {
           </div>
         </div>
 
-        {/* 🎛️ FILTERS ROW */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 24 }}>
-          <div style={{ ...compactCardStyle, flex: "1 1 200px" }}>
-            <CardHeader title="League & Level" isCollapsed={!sections.league} onToggle={() => toggleSection('league')} isActive={level !== "all" || leagueStatus !== "all"} onClear={(e:any) => { e.stopPropagation(); setLeagueStatus("all"); setLevel("all"); }} />
-         {sections.league && (
-                    <>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {[
-                          { key: "all", label: "All Players" },
-                          { key: "available", label: "Free Agents" },    // Shows unowned
-                          { key: "my_team", label: "My Team" },          // Shows yours
-                          { key: "rostered", label: "All Rostered" }     // Shows all taken
-                        ].map((opt) => { 
-                          const isLocked = !isUserPaid && opt.key !== "all"; 
-                          return (
-                            <button 
-                              key={opt.key} 
-                              onClick={() => !isLocked && setLeagueStatus(opt.key as LeagueStatus)} 
-                              style={{ 
-                                ...baseButtonStyle, 
-                                flex: 1, 
-                                padding: "6px 8px", // Slightly wider padding
-                                fontSize: 11, 
-                                ...(leagueStatus === opt.key ? selectedButtonStyle : null), 
-                                opacity: isLocked ? 0.6 : 1, 
-                                cursor: isLocked ? "not-allowed" : "pointer", 
-                                display: "flex", 
-                                alignItems: "center", 
-                                justifyContent: "center", 
-                                gap: "4px",
-                                whiteSpace: "nowrap" // Keep text on one line
-                              }}
-                            >
-                              {opt.label}
-                              {isLocked && <Icons.LockSmall />}
-                            </button>
-                          ); 
-                        })}
-                      </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {(["all", "mlb", "prospects"] as const).map(v => (
-                    <button key={v} onClick={() => setLevel(v)} style={{ ...baseButtonStyle, flex: 1, padding: "6px 4px", fontSize: 11, ...(level === v ? selectedButtonStyle : null) }}>
-                      {toTitleCase(v)}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-          <div style={{ ...compactCardStyle, flex: "1.4 1 260px" }}>
-            <CardHeader title="Positions" isCollapsed={!sections.positions} onToggle={() => toggleSection('positions')} isActive={selectedPositions.length > 0} onClear={(e:any) => { e.stopPropagation(); setSelectedPositions([]); }} />
-            {sections.positions && (<><div style={{ display: "flex", gap: 8, marginBottom: 4 }}><button onClick={() => setSelectedPositions([])} style={{ ...baseButtonStyle, flex: 1, ...(selectedPositions.length === 0 ? selectedButtonStyle : null) }}>All</button><button onClick={() => setSelectedPositions([...BATTER_POSITIONS])} style={{ ...baseButtonStyle, flex: 1, ...(BATTER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Batters</button><button onClick={() => setSelectedPositions([...PITCHER_POSITIONS])} style={{ ...baseButtonStyle, flex: 1, ...(PITCHER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Pitchers</button></div><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{ALL_POSITIONS.map(p => <button key={p} onClick={() => setSelectedPositions(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])} style={{ ...baseButtonStyle, width: 30, height: 30, padding: 0, borderRadius: "50%", fontSize: 10, ...(selectedPositions.includes(p) ? selectedButtonStyle : null) }}>{p}</button>)}</div></>)}
-          </div>
-          <div style={{ ...compactCardStyle, flex: "1 1 220px" }}>
-            <CardHeader title="American League" isCollapsed={!sections.al} onToggle={() => toggleSection('al')} isActive={AL_TEAMS.some(t => selectedTeams.includes(t)) && !AL_TEAMS.every(t => selectedTeams.includes(t))} onClear={(e:any) => { e.stopPropagation(); setSelectedTeams(prev => [...new Set([...prev, ...AL_TEAMS])]); }} />{sections.al && <TeamGrid teams={AL_TEAMS} />}
-          </div>
-          <div style={{ ...compactCardStyle, flex: "1 1 220px" }}>
-            <CardHeader title="National League" isCollapsed={!sections.nl} onToggle={() => toggleSection('nl')} isActive={NL_TEAMS.some(t => selectedTeams.includes(t)) && !NL_TEAMS.every(t => selectedTeams.includes(t))} onClear={(e:any) => { e.stopPropagation(); setSelectedTeams(prev => [...new Set([...prev, ...NL_TEAMS])]); }} />{sections.nl && <TeamGrid teams={NL_TEAMS} />}
-          </div>
-        </div>
+        {/* ❌ REMOVED: OLD FILTERS ROW ❌ */}
 
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
-          {/* SIDEBAR */}
-          <aside style={{ flex: "1 1 360px", width: "100%", display: "grid", gap: 16 }}>
-            <div style={cardStyle}>
-              <CardHeader title="Advanced Scouting Filters" onClear={() => setSelectedStatKeys([])} onToggle={() => {}} isCollapsed={false} isActive={selectedStatKeys.length > 0} />
-              {isMounted ? (
-                <DragDropContext onDragEnd={onDragEnd}>
-                  <Droppable droppableId="cores-list">
-                    {(provided) => (
-                      <div {...provided.droppableProps} ref={provided.innerRef} style={{ display: "grid", gap: "10px" }}>
-                        {orderedCores.map((group, index) => {
-                          const isOpen = openGroup === group.id;
-                          return (
-                            <Draggable key={group.id} draggableId={group.id} index={index}>
-                              {(provided) => (
-                                <div ref={provided.innerRef} {...provided.draggableProps} style={{ ...provided.draggableProps.style, border: "1px solid #eee", borderRadius: "12px", overflow: "hidden", background: "#fff" }}>
-                                  <div style={{ display: "flex", alignItems: "stretch", background: isOpen ? "#f0f7ff" : "#fff", borderBottom: isOpen ? "1px solid #eee" : "none" }}>
-                                    <div onClick={() => setOpenGroup(isOpen ? null : group.id)} style={{ flex: 1, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                      <span style={{ fontWeight: 900, fontSize: "13px", color: isOpen ? BUTTON_DARK_GREEN : "#333", textTransform: "uppercase", letterSpacing: "0.5px" }}>{group.label}</span>
-                                      <span style={{ fontSize: "18px", color: "#999", marginRight: "10px" }}>{isOpen ? "−" : "+"}</span>
-                                    </div>
-                                    <div {...provided.dragHandleProps} style={{ width: "40px", cursor: "grab", display: "flex", alignItems: "center", justifyContent: "center", borderLeft: "1px solid #f0f0f0", color: "#ccc" }}><span style={{ fontSize: "20px" }}>⠿</span></div>
-                                  </div>
-                                  {isOpen && (
-                                    <div style={{ padding: "12px", background: "#fafafa", display: "flex", flexDirection: "column", gap: "10px", borderTop: "1px solid #eee" }}>
-                                      {CORE_STATS[group.id]?.map((sk) => {
-  const config = STATS[sk]; if (!config) return null; 
-  const isSelected = selectedStatKeys.includes(sk);
-  const isDisabled = config.isPaid && !isUserPaid;
-  
-  // 1. DYNAMIC CONFIG: Read min/max/step directly from your new stats file
-  const minVal = config.min ?? 0;
-  const maxVal = config.max ?? 100;
-  const stepVal = config.step ?? 1;
-  
-  // 2. CURRENT VALUE: Default to the "Min" (0), not a generic number
-  const currentThreshold = statThresholds[sk] ?? minVal;
-
-  return (
-    <div key={sk} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-      <button disabled={isDisabled} onClick={() => toggleStat(sk)} style={{ ...baseButtonStyle, textAlign: "left", padding: "10px 12px", opacity: isDisabled ? 0.6 : 1, background: isSelected ? BUTTON_DARK_GREEN : "#fff", color: isSelected ? "#fff" : "#333", borderColor: isDisabled ? "#e0e0e0" : (isSelected ? BUTTON_DARK_GREEN : "#ddd"), display: "flex", flexDirection: "column", gap: "2px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
-          <span style={{ fontWeight: 800, fontSize: "12px" }}>{config.label}</span>
-          {config.isPaid && !isUserPaid && <span style={{ fontSize: "8px", background: "#ffebee", color: "#c62828", padding: "2px 6px", borderRadius: "4px", fontWeight: 900 }}>PRO</span>}
-        </div>
-        <div style={{ fontSize: "10px", fontWeight: 400, opacity: isSelected ? 0.9 : 0.6 }}>{config.description}</div>
-      </button>
-      
-      {isSelected && (
-        <div style={{ padding: "12px", background: "#fff", borderRadius: "10px", border: "1px solid " + BUTTON_DARK_GREEN, marginTop: "2px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            {/* MINUS BUTTON */}
-            <button 
-              onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold - stepVal).toFixed(3)) })); }} 
-              style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "30px" }}
-            >−</button>
-            
-            {/* SLIDER INPUT */}
-            <input 
-              type="range" 
-              min={minVal} 
-              max={maxVal} 
-              step={stepVal} 
-              value={currentThreshold} 
-              onChange={(e) => setStatThresholds(p => ({ ...p, [sk]: Number(e.target.value) }))} 
-              style={{ flex: 1, accentColor: BUTTON_DARK_GREEN, cursor: "pointer" }} 
-            />
-            
-            {/* PLUS BUTTON */}
-            <button 
-              onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold + stepVal).toFixed(3)) })); }} 
-              style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "30px" }}
-            >+</button>
-          </div>
           
-          <div style={{ textAlign: "center", marginTop: "8px", fontWeight: 900, color: BUTTON_DARK_GREEN, fontSize: "14px" }}>
-            {config.goodDirection === "higher" ? "> " : "< "}
-            {currentThreshold}
-            {config.unit === "percent" ? "%" : ""}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-})}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </Draggable>
-                          );
-                        })}
-                        {provided.placeholder}
-                      </div>
-                    )}
-                  </Droppable>
-                </DragDropContext>
-              ) : null}
-            </div>
-          </aside>
+          {/* NEW: Full width section */}
+          <section style={{ flex: "1 1 600px", width: "100%" }}>
+            
+            {/* IMPORTANT: overflow: visible allows the dropdowns to float outside the card */}
+            <div style={{ ...cardStyle, padding: 0, overflow: "visible" }}>
+              
+              {/* --- DROPDOWN STAT NAVIGATION --- */}
+              <div style={{ padding: "16px 20px 0 20px", display: "flex", gap: 8, flexWrap: "wrap", borderBottom: "1px solid #eee", background: "#f9f9f9", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+                {CORES.map((core) => {
+                  const isOpen = openGroup === core.id;
+                  // Count active stats in this category to show a badge
+                  const activeCount = CORE_STATS[core.id]?.filter(k => selectedStatKeys.includes(k)).length || 0;
 
-          <section style={{ flex: "2 1 600px", width: "100%" }}>
-            <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
-              <div ref={resultsTableRef} style={{ padding: "16px 20px", background: "#fff", borderBottom: "2px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+                  return (
+                    <div key={core.id} style={{ position: "relative", paddingBottom: 12 }}>
+                      {/* Button for the category */}
+                      <button 
+                        onClick={() => setOpenGroup(isOpen ? null : core.id)}
+                        style={{
+                           ...baseButtonStyle,
+                           background: isOpen ? "#fff" : "transparent",
+                           border: isOpen ? "1px solid #ddd" : "1px solid transparent",
+                           borderBottom: isOpen ? "1px solid white" : "1px solid transparent",
+                           zIndex: isOpen ? 1001 : 1,
+                           position: "relative",
+                           color: isOpen || activeCount > 0 ? BUTTON_DARK_GREEN : "#666",
+                           fontWeight: isOpen || activeCount > 0 ? 800 : 600
+                        }}
+                      >
+                          {core.label}
+                          {activeCount > 0 && <span style={{ marginLeft: 6, fontSize: 9, background: BUTTON_DARK_GREEN, color: 'white', padding: "1px 5px", borderRadius: 10 }}>{activeCount}</span>}
+                          <span style={{ marginLeft: 6, fontSize: 10, color: "#ccc" }}>{isOpen ? "▲" : "▼"}</span>
+                      </button>
+
+                      {/* Dropdown Content */}
+                      {isOpen && (
+                          <div className="filter-dropdown-content">
+                            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                              {CORE_STATS[core.id]?.map((sk) => {
+                                const config = STATS[sk]; if (!config) return null; 
+                                const isSelected = selectedStatKeys.includes(sk);
+                                const isDisabled = config.isPaid && !isUserPaid;
+                                const minVal = config.min ?? 0;
+                                const maxVal = config.max ?? 100;
+                                const stepVal = config.step ?? 1;
+                                const currentThreshold = statThresholds[sk] ?? minVal;
+
+                                return (
+                                  <div key={sk} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                    <button disabled={isDisabled} onClick={() => toggleStat(sk)} style={{ ...baseButtonStyle, textAlign: "left", padding: "10px 12px", opacity: isDisabled ? 0.6 : 1, background: isSelected ? BUTTON_DARK_GREEN : "#fff", color: isSelected ? "#fff" : "#333", borderColor: isDisabled ? "#e0e0e0" : (isSelected ? BUTTON_DARK_GREEN : "#ddd"), display: "flex", flexDirection: "column", gap: "2px" }}>
+                                      <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+                                        <span style={{ fontWeight: 800, fontSize: "12px" }}>{config.label}</span>
+                                        {config.isPaid && !isUserPaid && <span style={{ fontSize: "8px", background: "#ffebee", color: "#c62828", padding: "2px 6px", borderRadius: "4px", fontWeight: 900 }}>PRO</span>}
+                                      </div>
+                                      <div style={{ fontSize: 10, fontWeight: 400, opacity: isSelected ? 0.9 : 0.6 }}>{config.description}</div>
+                                    </button>
+                                     
+                                    {isSelected && (
+                                      <div style={{ padding: "12px", background: "#fff", borderRadius: "10px", border: "1px solid " + BUTTON_DARK_GREEN, marginTop: "2px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                          <button onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold - stepVal).toFixed(3)) })); }} style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "30px" }}>−</button>
+                                          <input type="range" min={minVal} max={maxVal} step={stepVal} value={currentThreshold} onChange={(e) => setStatThresholds(p => ({ ...p, [sk]: Number(e.target.value) }))} style={{ flex: 1, accentColor: BUTTON_DARK_GREEN, cursor: "pointer" }} />
+                                          <button onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold + stepVal).toFixed(3)) })); }} style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "30px" }}>+</button>
+                                        </div>
+                                        <div style={{ textAlign: "center", marginTop: "8px", fontWeight: 900, color: BUTTON_DARK_GREEN, fontSize: "14px" }}>
+                                          {config.goodDirection === "higher" ? "> " : "< "}
+                                          {currentThreshold}
+                                          {config.unit === "percent" ? "%" : ""}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                         </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* --- NEW: COMPACT FILTER CONTROL BAR --- */}
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #eee", background: "#fff" }}>
+                {/* Row 1: League Status / Level / Positions */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center", marginBottom: 12 }}>
+                  
+                  {/* LEAGUE SCOPE */}
+                  <div style={{ display: "flex", gap: 4 }}>
+                     {[
+                        { key: "all", label: "All" },
+                        { key: "available", label: "FA" },    
+                        { key: "my_team", label: "My Team" },            
+                        { key: "rostered", label: "Rostered" }       
+                      ].map((opt) => { 
+                        const isLocked = !isUserPaid && opt.key !== "all"; 
+                        return (
+                          <button 
+                            key={opt.key} 
+                            onClick={() => !isLocked && setLeagueStatus(opt.key as LeagueStatus)} 
+                            style={{ ...baseButtonStyle, padding: "4px 8px", fontSize: 11, ...(leagueStatus === opt.key ? selectedButtonStyle : null), opacity: isLocked ? 0.6 : 1, cursor: isLocked ? "not-allowed" : "pointer" }}
+                          >
+                            {opt.label}{isLocked && <Icons.LockSmall />}
+                          </button>
+                        ); 
+                      })}
+                  </div>
+
+                  <div style={{ width: 1, height: 20, background: "#eee" }} />
+
+                  {/* LEVEL */}
+                  <div style={{ display: "flex", gap: 4 }}>
+                     {(["all", "mlb", "prospects"] as const).map(v => (
+                      <button key={v} onClick={() => setLevel(v)} style={{ ...baseButtonStyle, padding: "4px 8px", fontSize: 11, ...(level === v ? selectedButtonStyle : null) }}>
+                        {toTitleCase(v)}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div style={{ width: 1, height: 20, background: "#eee" }} />
+
+                  {/* POSITIONS */}
+                  <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+                     <button onClick={() => setSelectedPositions([])} style={{ ...baseButtonStyle, padding: "4px 8px", fontSize: 11, ...(selectedPositions.length === 0 ? selectedButtonStyle : null) }}>All</button>
+                     <button onClick={() => setSelectedPositions([...BATTER_POSITIONS])} style={{ ...baseButtonStyle, padding: "4px 8px", fontSize: 11, ...(BATTER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Batters</button>
+                     <button onClick={() => setSelectedPositions([...PITCHER_POSITIONS])} style={{ ...baseButtonStyle, padding: "4px 8px", fontSize: 11, ...(PITCHER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Pitchers</button>
+                     
+                     <div style={{ display: "flex", gap: 4, marginLeft: 6 }}>
+                       {ALL_POSITIONS.map(p => (
+                         <button key={p} onClick={() => setSelectedPositions(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])} style={{ ...baseButtonStyle, width: 24, height: 24, padding: 0, borderRadius: "50%", fontSize: 9, ...(selectedPositions.includes(p) ? selectedButtonStyle : null) }}>{p}</button>
+                       ))}
+                     </div>
+                  </div>
+                </div>
+
+                {/* Row 2: Teams (Scrollable) */}
+                <TeamScrollRow />
+              </div>
+
+              {/* --- RESULTS BAR --- */}
+              <div ref={resultsTableRef} style={{ padding: "12px 20px", background: "#fcfcfc", borderBottom: "2px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
                 
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <span style={{ fontWeight: 900, fontSize: 18 }}>Results</span>
@@ -1079,7 +886,7 @@ const toggleStat = (key: StatKey) => {
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginLeft: "auto" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#f9f9f9", padding: "4px 8px", borderRadius: "8px", border: "1px solid #eee" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", padding: "4px 8px", borderRadius: "8px", border: "1px solid #eee" }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: "#999", textTransform: "uppercase", marginRight: 2 }}>📅 Range:</span>
                     <select value={dateRange} onChange={(e) => setDateRange(e.target.value as DateRangeOption)} style={{ ...baseButtonStyle, padding: "4px 8px", fontSize: 11, height: "28px", borderRadius: "6px" }}>
                       <option value="season_curr">Current Season</option>
@@ -1114,27 +921,13 @@ const toggleStat = (key: StatKey) => {
                     <tr>
                       <th title="Select to Compare" style={{ padding: 8, width: 32, textAlign: "center", color: "#888", fontSize: "10px", fontWeight: 900 }}>VS</th>
                       <th onClick={() => handleSort('name')} style={{ padding: "8px 12px", textAlign: "left", cursor: "pointer" }}>Player {sortKey === 'name' && (sortDir === 'asc' ? <Icons.SortAsc /> : <Icons.SortDesc />)}</th>
-                     {selectedStatKeys.map(k => {
-                        // Check if we need to show the Season Lock Badge
+                      {selectedStatKeys.map(k => {
                         const showLock = dateRange !== 'season_curr' && dateRange !== 'pace_season' && isSeasonLocked(k);
-                        
                         return (
                           <th key={k} onClick={() => handleSort(k)} style={{ padding: "8px 12px", textAlign: "right", color: BUTTON_DARK_GREEN, cursor: "pointer" }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
                               {showLock && (
-                                <span title="This stat is anchored to the Full Season (Talent Metric)" style={{ 
-                                  fontSize: 9, 
-                                  fontWeight: 900, 
-                                  color: '#999', 
-                                  border: '1px solid #ccc', 
-                                  borderRadius: '50%', 
-                                  width: '14px',
-                                  height: '14px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'help'
-                                }}>S</span>
+                                <span title="This stat is anchored to the Full Season (Talent Metric)" style={{ fontSize: 9, fontWeight: 900, color: '#999', border: '1px solid #ccc', borderRadius: '50%', width: '14px', height: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'help' }}>S</span>
                               )}
                               {STATS[k].label} {sortKey === k && (sortDir === 'asc' ? <Icons.SortAsc /> : <Icons.SortDesc />)}
                             </div>
@@ -1156,38 +949,26 @@ const toggleStat = (key: StatKey) => {
 
                       return (
                         <React.Fragment key={p.id}>
-                       {/* MAIN PLAYER ROW */}
-                        <tr 
-                          key={p.id} 
-                          onClick={() => setSelectedPlayer(p)} 
-                          style={{ cursor: 'pointer', borderBottom: '1px solid #eee', transition: 'background 0.2s' }} 
-                          className="hover:bg-gray-50"
-                        >
+                        {/* MAIN PLAYER ROW */}
+                          <tr 
+                            key={p.id} 
+                            onClick={() => setSelectedPlayer(p)} 
+                            style={{ cursor: 'pointer', borderBottom: '1px solid #eee', transition: 'background 0.2s' }} 
+                            className="hover:bg-gray-50"
+                          >
                             <td style={{ padding: "8px" }} onClick={e => e.stopPropagation()}>
                               <div className={`custom-checkbox ${isChecked ? 'checked' : ''}`} onClick={() => toggleCompare(p.id.toString())}>
                                 {isChecked && <Icons.Check />}
                               </div>
                             </td>
                             <td style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-                              <PlayerAvatar 
-                                team={p.team as TeamAbbr} 
-                                jerseyNumber={p.jerseyNumber} 
-                                hasNews={isExpanded} 
-                                availability={p.availability} // Backend ownership data
-                              />
+                              <PlayerAvatar team={p.team as TeamAbbr} jerseyNumber={p.jerseyNumber} hasNews={isExpanded} availability={p.availability} />
                               <div>
                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                   <span style={{ fontWeight: 700, fontSize: 14 }}>{p.name}</span>
                                   <span style={{ fontSize: 9, fontWeight: 800, color: "#666", background: "#eee", padding: "1px 4px", borderRadius: 3 }}>{p.position}</span>
-                                  
-                                  {/* Visual availability status badges */}
-                                  {p.availability === 'MY_TEAM' && (
-                                    <span style={{ fontSize: 9, fontWeight: 900, color: "#fff", background: "#4caf50", padding: "1px 6px", borderRadius: 10 }}>OWNED</span>
-                                  )}
-                                  {p.availability === 'ROSTERED' && (
-                                    <span style={{ fontSize: 9, fontWeight: 900, color: "#888", border: "1px solid #888", padding: "1px 6px", borderRadius: 10 }}>TAKEN</span>
-                                  )}
-
+                                  {p.availability === 'MY_TEAM' && (<span style={{ fontSize: 9, fontWeight: 900, color: "#fff", background: "#4caf50", padding: "1px 6px", borderRadius: 10 }}>OWNED</span>)}
+                                  {p.availability === 'ROSTERED' && (<span style={{ fontSize: 9, fontWeight: 900, color: "#888", border: "1px solid #888", padding: "1px 6px", borderRadius: 10 }}>TAKEN</span>)}
                                   {getTrajectory(p) && <span style={{ fontSize: 9, fontWeight: 800, color: getTrajectory(p)!.color, background: getTrajectory(p)!.bg, padding: "1px 4px", borderRadius: 4 }}>{getTrajectory(p)!.label}</span>}
                                 </div>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: "#555", marginTop: 2, fontFamily: "system-ui", display: "flex", gap: "6px", alignItems: "center" }}>
@@ -1209,18 +990,15 @@ const toggleStat = (key: StatKey) => {
                       const isBatterStat = BATTER_STATS.includes(k);
                       const isPitcherStat = PITCHER_STATS.includes(k);
                       
-                      // 1. Ghost Zero Check (Hide irrelevant stats)
                       if ((isPitcher && isBatterStat) || (!isPitcher && isPitcherStat)) {
                         return <td key={k} style={{ textAlign: "center", padding: "12px 10px", color: "#ccc" }}>-</td>;
                       }
 
-                      // 2. Get Raw Value
                       const rawVal = p.stats?.[k];
                       if (rawVal === undefined || rawVal === null) {
-                         return <td key={k} style={{ textAlign: "right", padding: "8px 12px", color: "#ccc" }}>-</td>;
+                          return <td key={k} style={{ textAlign: "right", padding: "8px 12px", color: "#ccc" }}>-</td>;
                       }
 
-                      // 3. Smart Formatting
                       const config = STATS[k];
                       let displayVal = rawVal;
 
@@ -1228,19 +1006,14 @@ const toggleStat = (key: StatKey) => {
                           const num = parseFloat(rawVal);
                           if (!isNaN(num)) {
                               if (config.unit === 'percent') {
-                                  // Add % sign (and fix decimal if needed)
                                   displayVal = `${num.toFixed(1)}%`;
                               } else if (['avg', 'obp', 'slg', 'xba', 'xwoba', 'woba'].includes(k)) {
-                                  // Baseball Format: .300 (no leading zero)
                                   displayVal = num.toFixed(3).replace(/^0+/, ''); 
                               } else if (['era', 'whip', 'k_bb_ratio', 'xera', 'fip'].includes(k)) {
-                                  // Pitching Ratios: 3.45
                                   displayVal = num.toFixed(2);
                               } else if (['ip'].includes(k)) {
-                                  // Innings: 120.1
                                   displayVal = num.toFixed(1);
                               } else {
-                                  // Integers (HR, SB) or 1-decimal for Ev/Speed
                                   if (Number.isInteger(num)) {
                                      displayVal = num.toString();
                                   } else {
@@ -1280,11 +1053,11 @@ const toggleStat = (key: StatKey) => {
       </main>
 
       <footer style={{ background: "#111", color: "#eee", padding: "60px 20px 30px 20px", marginTop: 60 }}>
-        <div style={{ maxWidth: 1600, margin: "0 auto", display: "flex", flexWrap: "wrap", gap: 40, justifyContent: "space-between" }}>
+        <div className="wide-container" style={{ display: "flex", flexWrap: "wrap", gap: 40, justifyContent: "space-between" }}>
           <div style={{ flex: "1 1 250px" }}><div style={{ fontWeight: 900, fontSize: 24, marginBottom: 16, color: "#fff" }}>ROTO FILTER</div><p style={{ fontSize: 14, color: "#888", lineHeight: 1.6 }}>The ultimate MLB player analysis and filter tool. Built for fantasy baseball managers who need a competitive edge.</p></div>
           {[{ title: "Product", links: ["Filters", "Live News", "Stat Glossary", "Pro Upgrades"] }, { title: "Resources", links: ["Draft Guide", "Strategy Tips", "Community", "Support"] }, { title: "Legal", links: ["Privacy Policy", "Terms of Service", "Cookie Policy", "Contact"] }].map(col => (<div key={col.title} style={{ flex: "1 1 120px" }}><div style={{ fontWeight: 800, fontSize: 12, color: "#fff", textTransform: "uppercase", letterSpacing: 1, marginBottom: 20 }}>{col.title}</div><ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 12 }}>{col.links.map(link => (<li key={link}><a href="#" style={{ color: "#888", fontSize: 14, textDecoration: "none", transition: "0.2s" }}>{link}</a></li>))}</ul></div>))}
         </div>
-        <div style={{ maxWidth: 1600, margin: "40px auto 0 auto", paddingTop: 30, borderTop: "1px solid #222", textAlign: "center", color: "#555", fontSize: 12 }}>© {new Date().getFullYear()} Roto Filter. Not affiliated with Major League Baseball.</div>
+        <div className="wide-container" style={{ marginTop: 40, paddingTop: 30, borderTop: "1px solid #222", textAlign: "center", color: "#555", fontSize: 12 }}>© {new Date().getFullYear()} Roto Filter. Not affiliated with Major League Baseball.</div>
       </footer>
       
       {/* --- MODALS --- */}
