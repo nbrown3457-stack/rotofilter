@@ -33,6 +33,23 @@ import {
 // 4. Standard Libraries
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 
+/* =============================================================================
+   SECTION 0.5 — Local Icons & Styles
+============================================================================= */
+
+// Simple SVGs for the Category Pills
+const CategoryIcons = {
+  Context: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>,
+  Bat: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l12 12 3-3-12-12z" /></svg>,
+  Power: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.5-3.3a9 9 0 0 0 3 3.3z"></path></svg>,
+  Eye: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>,
+  Target: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>,
+  Speed: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>,
+  Ball: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2v20"></path></svg>,
+  Stuff: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>,
+  Check: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+};
+
 const PulseStyles = () => (
   <style dangerouslySetInnerHTML={{ __html: `
     @keyframes pulse-ring { 0% { transform: scale(0.33); opacity: 1; } 80%, 100% { opacity: 0; } }
@@ -92,22 +109,8 @@ const PulseStyles = () => (
       .nav-logo-subtext { display: none; }
     }
     
-    .filter-dropdown-content {
-       position: absolute;
-       top: 110%;
-       left: 0;
-       width: 320px;
-       max-height: 500px;
-       overflow-y: auto;
-       background: white;
-       border-radius: 12px;
-       box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-       border: 1px solid #eee;
-       padding: 12px;
-       z-index: 1000;
-       animation: fadeIn 0.15s ease-out;
-    }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+    /* Animation for the filter tray */
+    @keyframes slideDownTray { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
   `}} />
 );
 
@@ -117,7 +120,6 @@ const PulseStyles = () => (
 type BatterPos = "C" | "1B" | "2B" | "3B" | "SS" | "OF" | "DH";
 type PitcherPos = "SP" | "RP";
 type Position = BatterPos | PitcherPos | "batters" | "pitchers";
-// ✅ UPDATED: Added rookies to Level type
 type Level = "all" | "mlb" | "prospects" | "rookies";
 type LeagueStatus = "all" | "available" | "rostered" | "my_team";
 type FilterTab = "recommended" | "expert" | "my_filters";
@@ -125,7 +127,6 @@ type StatViewMode = "actual" | "pace";
 
 const AL_TEAMS = ["BAL","BOS","CWS","CLE","DET","HOU","KC","LAA","MIN","NYY","OAK","SEA","TB","TEX","TOR"] as const;
 const NL_TEAMS = ["ARI","ATL","CHC","CIN","COL","LAD","MIA","MIL","NYM","PHI","PIT","SD","SF","STL","WSH"] as const;
-// ✅ UPDATED: Alphabetical sort for teams
 const ALL_TEAMS = [...AL_TEAMS, ...NL_TEAMS].sort();
 const BATTER_POSITIONS: Position[] = ["C", "1B", "2B", "3B", "SS", "OF", "DH"];
 const PITCHER_POSITIONS: Position[] = ["SP", "RP"];
@@ -207,7 +208,6 @@ const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline, availability }: a
   );
 };
 
-// ✅ UPDATED: ToolLegend with overflow auto and nowrap to enable scrolling on mobile
 const ToolLegend = () => (
   <div className="hide-scrollbar" style={{ display: "flex", gap: 16, padding: "10px 16px", background: "#f5f5f5", borderRadius: 8, marginBottom: 12, alignItems: "center", overflowX: "auto", whiteSpace: "nowrap" }}>
     <div style={{ fontSize: 10, fontWeight: 700, color: "#666", textTransform: "uppercase", marginRight: 4 }}>Key:</div>
@@ -238,7 +238,7 @@ export default function Home() {
   const [customEnd, setCustomEnd] = useState("");
   const [compareList, setCompareList] = useState<string[]>([]);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
-  const [openGroup, setOpenGroup] = useState<CoreId | null>(null); // Reused for Dropdown menus
+  const [openGroup, setOpenGroup] = useState<CoreId | null>(null); 
   const [isUserPaid, setIsUserPaid] = useState(true); 
   const [isMounted, setIsMounted] = useState(false);
   const resultsTableRef = useRef<HTMLDivElement>(null);
@@ -742,90 +742,182 @@ const toggleStat = (key: StatKey) => {
             <div style={{ ...cardStyle, padding: 0, overflow: "visible" }}>
               
               {/* --- 1. STAT CATEGORIES (Horizontal Scroll) --- */}
-              {/* ✅ FIX: added overflowX: auto, whiteSpace: nowrap, flexWrap: nowrap */}
-              <div className="hide-scrollbar" style={{ 
-                padding: "16px 20px 0 20px", 
-                display: "flex", 
-                gap: 8, 
-                overflowX: "auto", 
-                whiteSpace: "nowrap", 
-                flexWrap: "nowrap",
-                borderBottom: "1px solid #eee", 
-                background: "#f9f9f9", 
-                borderTopLeftRadius: 16, 
-                borderTopRightRadius: 16 
-              }}>
-                {CORES.map((core) => {
-                  const isOpen = openGroup === core.id;
-                  const activeCount = CORE_STATS[core.id]?.filter(k => selectedStatKeys.includes(k)).length || 0;
+              {(() => {
+                const CATEGORY_DISPLAY: Record<string, { label: string; icon: any }> = {
+                  "profile":          { label: "Context",    icon: CategoryIcons.Context },
+                  "std_hit":          { label: "Basic Bat",  icon: CategoryIcons.Bat },
+                  "power":            { label: "Power",      icon: CategoryIcons.Power },
+                  "discipline":       { label: "Discipline", icon: CategoryIcons.Eye },
+                  "contact":          { label: "Contact",    icon: CategoryIcons.Target },
+                  "speed":            { label: "Speed",      icon: CategoryIcons.Speed }, 
+                  "std_pitch":        { label: "Basic Arm",  icon: CategoryIcons.Ball },
+                  "pitch_shape":      { label: "Stuff",      icon: CategoryIcons.Stuff },
+                  "pitch_outcomes":   { label: "Outcomes",   icon: CategoryIcons.Check },
+                };
 
-                  return (
-                    <div key={core.id} style={{ position: "relative", paddingBottom: 12, flexShrink: 0 }}>
-                      <button 
-                        onClick={() => setOpenGroup(isOpen ? null : core.id)}
-                        style={{
-                           ...baseButtonStyle,
-                           background: isOpen ? "#fff" : "transparent",
-                           border: isOpen ? "1px solid #ddd" : "1px solid transparent",
-                           borderBottom: isOpen ? "1px solid white" : "1px solid transparent",
-                           zIndex: isOpen ? 1001 : 1,
-                           position: "relative",
-                           color: isOpen || activeCount > 0 ? BUTTON_DARK_GREEN : "#666",
-                           fontWeight: isOpen || activeCount > 0 ? 800 : 600
-                        }}
-                      >
-                          {core.label}
-                          {activeCount > 0 && <span style={{ marginLeft: 6, fontSize: 9, background: BUTTON_DARK_GREEN, color: 'white', padding: "1px 5px", borderRadius: 10 }}>{activeCount}</span>}
-                          <span style={{ marginLeft: 6, fontSize: 10, color: "#ccc" }}>{isOpen ? "▲" : "▼"}</span>
-                      </button>
+                return (
+                  <>
+                    <div className="hide-scrollbar" style={{ 
+                        padding: "16px 12px 0 12px", 
+                        display: "flex", 
+                        gap: 8, 
+                        overflowX: "auto", 
+                        whiteSpace: "nowrap", 
+                        flexWrap: "nowrap",
+                        borderBottom: openGroup ? "none" : "1px solid #e0e0e0", 
+                        background: "#f9f9f9", 
+                        borderTopLeftRadius: 16, 
+                        borderTopRightRadius: 16 
+                    }}>
+                        {CORES.map((core) => {
+                        const isOpen = openGroup === core.id;
+                        const activeCount = CORE_STATS[core.id]?.filter(k => selectedStatKeys.includes(k)).length || 0;
+                        const display = CATEGORY_DISPLAY[core.id] || { label: core.label, icon: null };
 
-                      {/* Dropdown Content */}
-                      {isOpen && (
-                          <div className="filter-dropdown-content" style={{ left: 0 }}>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                              {CORE_STATS[core.id]?.map((sk) => {
-                                const config = STATS[sk]; if (!config) return null; 
-                                const isSelected = selectedStatKeys.includes(sk);
-                                const isDisabled = config.isPaid && !isUserPaid;
-                                const minVal = config.min ?? 0;
-                                const maxVal = config.max ?? 100;
-                                const stepVal = config.step ?? 1;
-                                const currentThreshold = statThresholds[sk] ?? minVal;
+                        // DYNAMIC STYLING
+                        const isActiveStyle = {
+                            background: BUTTON_DARK_GREEN, 
+                            color: "white", 
+                            borderColor: BUTTON_DARK_GREEN,
+                            boxShadow: "0 4px 12px rgba(27, 94, 32, 0.3)"
+                        };
 
-                                return (
-                                  <div key={sk} style={{ display: "flex", flexDirection: "column", gap: "6px", whiteSpace: "normal" }}>
-                                    <button disabled={isDisabled} onClick={() => toggleStat(sk)} style={{ ...baseButtonStyle, textAlign: "left", padding: "10px 12px", opacity: isDisabled ? 0.6 : 1, background: isSelected ? BUTTON_DARK_GREEN : "#fff", color: isSelected ? "#fff" : "#333", borderColor: isDisabled ? "#e0e0e0" : (isSelected ? BUTTON_DARK_GREEN : "#ddd"), display: "flex", flexDirection: "column", gap: "2px" }}>
-                                      <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
-                                        <span style={{ fontWeight: 800, fontSize: "12px" }}>{config.label}</span>
-                                        {config.isPaid && !isUserPaid && <span style={{ fontSize: "8px", background: "#ffebee", color: "#c62828", padding: "2px 6px", borderRadius: "4px", fontWeight: 900 }}>PRO</span>}
-                                      </div>
-                                      <div style={{ fontSize: 10, fontWeight: 400, opacity: isSelected ? 0.9 : 0.6 }}>{config.description}</div>
-                                    </button>
-                                    
-                                    {isSelected && (
-                                      <div style={{ padding: "12px", background: "#fff", borderRadius: "10px", border: "1px solid " + BUTTON_DARK_GREEN, marginTop: "2px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                          <button onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold - stepVal).toFixed(3)) })); }} style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "30px" }}>−</button>
-                                          <input type="range" min={minVal} max={maxVal} step={stepVal} value={currentThreshold} onChange={(e) => setStatThresholds(p => ({ ...p, [sk]: Number(e.target.value) }))} style={{ flex: 1, accentColor: BUTTON_DARK_GREEN, cursor: "pointer" }} />
-                                          <button onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold + stepVal).toFixed(3)) })); }} style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "30px" }}>+</button>
-                                        </div>
-                                        <div style={{ textAlign: "center", marginTop: "8px", fontWeight: 900, color: BUTTON_DARK_GREEN, fontSize: "14px" }}>
-                                          {config.goodDirection === "higher" ? "> " : "< "}
-                                          {currentThreshold}
-                                          {config.unit === "percent" ? "%" : ""}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
+                        const hasFilterStyle = {
+                            background: "white", 
+                            color: BUTTON_DARK_GREEN, 
+                            borderColor: BUTTON_DARK_GREEN,
+                            borderWidth: "1px"
+                        };
+
+                        const defaultStyle = {
+                            background: "white", 
+                            color: "#555", 
+                            borderColor: "transparent",
+                            boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
+                        };
+
+                        let currentStyle = isOpen ? isActiveStyle : (activeCount > 0 ? hasFilterStyle : defaultStyle);
+
+                        return (
+                            <div key={core.id} style={{ position: "relative", paddingBottom: 12, flexShrink: 0 }}>
+                            <button 
+                                onClick={() => setOpenGroup(isOpen ? null : core.id)}
+                                style={{
+                                ...baseButtonStyle,
+                                ...currentStyle,
+                                padding: "8px 14px",
+                                borderRadius: "24px",
+                                fontSize: "12px",
+                                fontWeight: (isOpen || activeCount > 0) ? 800 : 600,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                transition: "all 0.2s ease",
+                                border: isOpen ? `1px solid ${BUTTON_DARK_GREEN}` : (activeCount > 0 ? `1px solid ${BUTTON_DARK_GREEN}` : "1px solid #eee"),
+                                zIndex: isOpen ? 1002 : 1
+                                }}
+                            >
+                                {display.icon && <span style={{ opacity: isOpen ? 1 : 0.7 }}>{display.icon}</span>}
+                                {display.label}
+                                {activeCount > 0 && (
+                                    <span style={{ 
+                                    marginLeft: 4, 
+                                    fontSize: 9, 
+                                    background: isOpen ? "#fff" : BUTTON_DARK_GREEN, 
+                                    color: isOpen ? BUTTON_DARK_GREEN : "#fff", 
+                                    fontWeight: 900,
+                                    width: 18,
+                                    height: 18,
+                                    display: "flex", 
+                                    alignItems: "center", 
+                                    justifyContent: "center",
+                                    borderRadius: "50%" 
+                                    }}>
+                                    {activeCount}
+                                    </span>
+                                )}
+                                <span style={{ fontSize: 8, opacity: 0.5, marginLeft: 2 }}>{isOpen ? "▲" : "▼"}</span>
+                            </button>
+                            {/* NOTE: Removed the dropdown from here to avoid clipping */}
                             </div>
-                          </div>
-                      )}
+                        );
+                        })}
                     </div>
-                  );
-                })}
-              </div>
+
+                    {/* --- THE FILTER TRAY (Fixes Overflow Clipping) --- */}
+                    {openGroup && (
+                        <div style={{ 
+                            background: "#fafafa", 
+                            borderBottom: "1px solid #ddd", 
+                            borderTop: `2px solid ${BUTTON_DARK_GREEN}`, 
+                            padding: "20px", 
+                            boxShadow: "inset 0 4px 12px rgba(0,0,0,0.05)",
+                            animation: "slideDownTray 0.2s ease-out"
+                        }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                                <h4 style={{ margin: 0, fontSize: 12, fontWeight: 900, color: "#999", textTransform: "uppercase" }}>
+                                    Select Stats for {CATEGORY_DISPLAY[openGroup]?.label || openGroup}
+                                </h4>
+                                <button onClick={() => setOpenGroup(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#999" }}><Icons.X size={16} /></button>
+                            </div>
+
+                            <div style={{ 
+                                display: "grid", 
+                                gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", 
+                                gap: 12 
+                            }}>
+                                {CORE_STATS[openGroup]?.map((sk) => {
+                                    const config = STATS[sk]; if (!config) return null; 
+                                    const isSelected = selectedStatKeys.includes(sk);
+                                    const isDisabled = config.isPaid && !isUserPaid;
+                                    const minVal = config.min ?? 0;
+                                    const maxVal = config.max ?? 100;
+                                    const stepVal = config.step ?? 1;
+                                    const currentThreshold = statThresholds[sk] ?? minVal;
+
+                                    return (
+                                        <div key={sk} style={{ 
+                                            background: "#fff", 
+                                            borderRadius: 8, 
+                                            border: `1px solid ${isSelected ? BUTTON_DARK_GREEN : "#eee"}`,
+                                            padding: 12,
+                                            opacity: isDisabled ? 0.6 : 1,
+                                            boxShadow: isSelected ? "0 4px 12px rgba(27, 94, 32, 0.15)" : "0 2px 4px rgba(0,0,0,0.02)",
+                                            transition: "all 0.2s"
+                                        }}>
+                                            <div onClick={() => !isDisabled && toggleStat(sk)} style={{ cursor: isDisabled ? "not-allowed" : "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                                                <div>
+                                                    <div style={{ fontWeight: 800, fontSize: 13, color: isSelected ? BUTTON_DARK_GREEN : "#333" }}>{config.label}</div>
+                                                    <div style={{ fontSize: 10, color: "#888", lineHeight: 1.2 }}>{config.description}</div>
+                                                </div>
+                                                <div className={`custom-checkbox ${isSelected ? 'checked' : ''}`}>
+                                                    {isSelected && <Icons.Check style={{ stroke: "white" }} />}
+                                                </div>
+                                            </div>
+
+                                            {isSelected && (
+                                                <div style={{ paddingTop: 8, borderTop: "1px solid #f0f0f0" }}>
+                                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                        <button onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold - stepVal).toFixed(3)) })); }} style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "24px" }}>−</button>
+                                                        <input type="range" min={minVal} max={maxVal} step={stepVal} value={currentThreshold} onChange={(e) => setStatThresholds(p => ({ ...p, [sk]: Number(e.target.value) }))} style={{ flex: 1, accentColor: BUTTON_DARK_GREEN, cursor: "pointer", height: 4 }} />
+                                                        <button onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold + stepVal).toFixed(3)) })); }} style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "24px" }}>+</button>
+                                                    </div>
+                                                    <div style={{ textAlign: "right", marginTop: "4px", fontWeight: 900, color: BUTTON_DARK_GREEN, fontSize: "12px" }}>
+                                                        {config.goodDirection === "higher" ? "Min: " : "Max: "}
+                                                        {currentThreshold}
+                                                        {config.unit === "percent" ? "%" : ""}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* --- 2. COMPACT SUPER ROW (Split into 2 Rows) --- */}
               <div style={{ background: "#fff", borderBottom: "1px solid #eee" }}>
