@@ -60,11 +60,31 @@ const PulseStyles = () => (
     .sticky-container { overflow: auto; max-height: 800px; position: relative; }
     .sticky-table { border-collapse: separate; border-spacing: 0; width: 100%; }
     .sticky-table thead th { position: sticky; top: 0; z-index: 20; background: #fafafa; box-shadow: inset 0 -1px 0 #eee; cursor: pointer; user-select: none; }
-    .sticky-table td:nth-child(1), .sticky-table th:nth-child(1) { position: sticky; left: 0; z-index: 30; background: white; width: 32px; min-width: 32px; }
-    .sticky-table td:nth-child(2), .sticky-table th:nth-child(2) { position: sticky; left: 32px; z-index: 30; background: white; }
-    .sticky-table th:nth-child(1), .sticky-table th:nth-child(2) { z-index: 40; background: #fafafa; }
-    .sticky-table td:nth-child(2)::after, .sticky-table th:nth-child(2)::after { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: #eee; }
-    .active-row td:nth-child(1), .active-row td:nth-child(2) { background-color: #f0f7ff !important; }
+    
+    /* === UNIVERSAL STICKY COLUMN LOGIC (Column 1 is Player Name) === */
+    /* Sticky behavior for the 1st column (Player Identity) */
+    .sticky-table td:nth-child(1), .sticky-table th:nth-child(1) { 
+        position: sticky; 
+        left: 0; 
+        z-index: 30; 
+        background: white; 
+    }
+    .sticky-table th:nth-child(1) { 
+        z-index: 40; 
+        background: #fafafa; 
+    }
+    /* Border line after sticky column */
+    .sticky-table td:nth-child(1)::after, .sticky-table th:nth-child(1)::after { 
+        content: ""; 
+        position: absolute; 
+        right: 0; 
+        top: 0; 
+        bottom: 0; 
+        width: 1px; 
+        background: #eee; 
+    }
+    .active-row td:nth-child(1) { background-color: #f0f7ff !important; }
+    
     footer a:hover { color: #4caf50 !important; text-decoration: underline; }
     .preset-card { transition: all 0.2s ease; border: 1px solid rgba(255,255,255,0.1); }
     .preset-card:hover { transform: translateY(-4px); border-color: #1b5e20; box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
@@ -80,18 +100,32 @@ const PulseStyles = () => (
     .desktop-nav-links { display: flex; }
     .mobile-bottom-nav { display: none; }
     
-    /* SCROLLBAR HIDING FOR CLEAN LOOK */
     .hide-scrollbar::-webkit-scrollbar { display: none; }
     .hide-scrollbar { -ms-overflow-style: none;  scrollbar-width: none; }
 
-    /* LAYOUT OVERRIDES */
     .wide-container { width: 98%; max-width: 2500px; margin: 0 auto; }
     .main-padding { padding: 8px; }
 
+    /* --- MOBILE OVERRIDES (THE YAHOO FIX) --- */
     @media (max-width: 768px) {
       .wide-container { width: 99.5%; } 
       .main-padding { padding: 4px !important; }
       .desktop-nav-links { display: none !important; }
+      
+      /* FIXED IDENTITY COLUMN (Col 1) - Narrow & Sticky on Mobile */
+      .sticky-table th:nth-child(1), .sticky-table td:nth-child(1) {
+         width: 80px !important;
+         min-width: 80px !important;
+         max-width: 80px !important;
+         padding: 8px 4px !important;
+         box-shadow: 2px 0 6px rgba(0,0,0,0.15); /* The "Floating" Shadow */
+         z-index: 50;
+      }
+      
+      /* Hide detailed info on mobile, show stacked */
+      .desktop-player-info { display: none !important; }
+      .mobile-player-info { display: flex !important; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
+      
       .mobile-floating-bar { display: flex; position: fixed; top: 64px; left: 0; right: 0; z-index: 90; background: rgba(27, 94, 32, 0.95); backdrop-filter: blur(8px); padding: 10px 20px; align-items: center; justify-content: space-between; color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); animation: slideDown 0.3s ease-out; }
       @keyframes slideDown { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       .mobile-bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; right: 0; background: #121212; border-top: 1px solid #2a2a2a; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); height: 60px; align-items: center; overflow-x: auto; justify-content: flex-start; box-shadow: 0 -4px 15px rgba(0,0,0,0.5); }
@@ -191,15 +225,28 @@ const cardStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = { fontWeight: 800, fontSize: 10, color: "#666", textTransform: "uppercase", letterSpacing: "0.8px" };
 
 
-const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline, availability }: any) => {
+const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline, availability, isSelected }: any) => {
   const teamColor = TEAM_PRIMARY[team as TeamAbbr] || "#444";
+  
+  // Dynamic style for selection (Mobile Tap)
+  const selectionStyle = isSelected ? { border: `3px solid ${BUTTON_DARK_GREEN}`, boxShadow: `0 0 0 2px #fff inset, 0 4px 8px rgba(0,0,0,0.3)` } : { border: "2px solid #fff" };
+
   return (
     <div style={{ position: 'relative', flexShrink: 0 }} title={headline}>
-      <div style={{ width: 32, height: 32, backgroundColor: teamColor, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #fff", boxShadow: "0 2px 8px rgba(0,0,0,0.2)", position: 'relative', overflow: 'hidden' }}>
+      <div style={{ ...selectionStyle, width: 32, height: 32, backgroundColor: teamColor, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.2)", position: 'relative', overflow: 'hidden', transition: 'all 0.2s' }}>
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 50%)' }} />
         <span style={{ color: "#fff", fontSize: "14px", fontWeight: 900, fontFamily: "ui-monospace, monospace", position: 'relative', zIndex: 2, textShadow: "1px 1px 2px rgba(0,0,0,0.4)" }}>{jerseyNumber || "--"}</span>
+        
+        {/* CHECKMARK OVERLAY IF SELECTED */}
+        {isSelected && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(27, 94, 32, 0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5 }}>
+             <Icons.Check style={{ width: 18, height: 18, stroke: 'white' }} />
+          </div>
+        )}
       </div>
-      {hasNews && <div className="news-pulse" />}
+      
+      {hasNews && !isSelected && <div className="news-pulse" />}
+      
       {availability === 'MY_TEAM' && (
         <div style={{ position: 'absolute', top: -2, left: -2, width: 10, height: 10, background: '#4caf50', borderRadius: '50%', border: '2px solid white', zIndex: 10 }} />
       )}
@@ -216,10 +263,6 @@ const ToolLegend = () => (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#2196f3", background: "#e3f2fd", padding: "2px 6px", borderRadius: 4 }}>S</span><span style={{ fontSize: 10, color: "#555" }}>Speed (Spd &gt; 28)</span></div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#ff9800", background: "#fff3e0", padding: "2px 6px", borderRadius: 4 }}>D</span><span style={{ fontSize: 10, color: "#555" }}>Disc (BB% &gt; 10)</span></div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#9c27b0", background: "#f3e5f5", padding: "2px 6px", borderRadius: 4 }}>C</span><span style={{ fontSize: 10, color: "#555" }}>Context (OPS &gt; .800)</span></div>
-    <div style={{ display: "flex", alignItems: "center", gap: 6, borderLeft: "1px solid #ddd", paddingLeft: 12, marginLeft: 6 }}>
-        <span style={{ fontSize: 9, fontWeight: 900, color: '#999', border: '1px solid #ccc', borderRadius: '50%', width: '14px', height: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>S</span>
-        <span style={{ fontSize: 10, color: "#555" }}>Season Anchor</span>
-    </div>
   </div>
 );
 
@@ -494,10 +537,8 @@ useEffect(() => {
 
       if (selectedPositions.length > 0 && !selectedPositions.includes(p.position as Position)) return false;
       
-      // ✅ UPDATED: Level Logic to include Rookies
       if (level !== "all") {
          if (level === "rookies") {
-             // ⚠️ Checks for rookie status (assumes is_rookie or level='rookie')
              if (!p.is_rookie && p.level !== 'rookie') return false; 
          } else {
              if (p.level !== level) return false;
@@ -838,7 +879,6 @@ const toggleStat = (key: StatKey) => {
                                 )}
                                 <span style={{ fontSize: 8, opacity: 0.5, marginLeft: 2 }}>{isOpen ? "▲" : "▼"}</span>
                             </button>
-                            {/* NOTE: Removed the dropdown from here to avoid clipping */}
                             </div>
                         );
                         })}
@@ -930,7 +970,7 @@ const toggleStat = (key: StatKey) => {
                           {[
                             { key: "all", label: "All" },
                             { key: "available", label: "FA" },    
-                            { key: "my_team", label: "My Team" },                   
+                            { key: "my_team", label: "My Team" },                    
                             { key: "rostered", label: "Rostered" }       
                           ].map((opt) => { 
                             const isLocked = !isUserPaid && opt.key !== "all"; 
@@ -997,8 +1037,6 @@ const toggleStat = (key: StatKey) => {
                   <span style={{ fontWeight: 900, fontSize: 18 }}>Results</span>
                   {loading ? <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#666" }}><Icons.Spinner /> Scouting...</span> : <span style={{ fontSize: 11, fontWeight: 800, color: BUTTON_DARK_GREEN, background: "#e8f5e9", padding: "4px 10px", borderRadius: 20 }}>{filteredPlayers.length} Found</span>}
                   
-                  {/* ✅ DELETED: Tool Filter Select (minTools) removed as requested */}
-
                   <button onClick={handleGlobalReset} style={{...baseButtonStyle, fontSize: 10, padding: "4px 10px", background: "#fdecea", color: "#721c24", borderColor: "#f5c6cb"}}>Reset</button>
                   <button onClick={saveCurrentFilter} title="Save current filter" style={{...baseButtonStyle, fontSize: 10, padding: "4px 10px", background: "#e3f2fd", color: "#0d47a1", borderColor: "#90caf9", display: "flex", alignItems: "center", gap: 4}}><Icons.Save /> Save</button>
 
@@ -1042,7 +1080,7 @@ const toggleStat = (key: StatKey) => {
                 <table className="sticky-table" style={{ fontSize: 13 }}>
                   <thead>
                     <tr>
-                      <th title="Select to Compare" style={{ padding: 8, width: 32, textAlign: "center", color: "#888", fontSize: "10px", fontWeight: 900 }}>VS</th>
+                      {/* --- NO MORE CHECKBOX COLUMN HERE --- */}
                       <th onClick={() => handleSort('name')} style={{ padding: "8px 12px", textAlign: "left", cursor: "pointer" }}>Player {sortKey === 'name' && (sortDir === 'asc' ? <Icons.SortAsc /> : <Icons.SortDesc />)}</th>
                       {selectedStatKeys.map(k => {
                         const showLock = dateRange !== 'season_curr' && dateRange !== 'pace_season' && isSeasonLocked(k);
@@ -1088,19 +1126,35 @@ const toggleStat = (key: StatKey) => {
                       return (
                         <React.Fragment key={p.id}>
                         {/* MAIN PLAYER ROW */}
-                          <tr 
-                            key={p.id} 
-                            onClick={() => setSelectedPlayer(p)} 
-                            style={{ cursor: 'pointer', borderBottom: '1px solid #eee', transition: 'background 0.2s' }} 
-                            className="hover:bg-gray-50"
-                          >
-                            <td style={{ padding: "8px" }} onClick={e => e.stopPropagation()}>
-                              <div className={`custom-checkbox ${isChecked ? 'checked' : ''}`} onClick={() => toggleCompare(p.id.toString())}>
-                                {isChecked && <Icons.Check />}
+                        <tr 
+                          key={p.id} 
+                          onClick={() => setSelectedPlayer(p)} 
+                          style={{ cursor: 'pointer', borderBottom: '1px solid #eee', transition: 'background 0.2s' }} 
+                          className="hover:bg-gray-50"
+                        >
+                          {/* --- NO MORE CHECKBOX TD HERE --- */}
+
+                          {/* COL 1: PLAYER IDENTITY (Adaptive Layout) */}
+                          <td style={{ padding: "8px 12px" }}>
+                            
+                            {/* MOBILE LAYOUT: Stacked & Avatar is Clickable for Compare */}
+                            <div className="mobile-player-info" style={{ display: "none" }}>
+                                <div onClick={(e) => { e.stopPropagation(); toggleCompare(p.id.toString()); }}>
+                                    <PlayerAvatar team={p.team as TeamAbbr} jerseyNumber={p.jerseyNumber} hasNews={isExpanded} availability={p.availability} isSelected={isChecked} />
+                                </div>
+                                <div style={{ lineHeight: 1.1, marginTop: 4 }}>
+                                   <div style={{ fontWeight: 800, fontSize: 11, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "70px" }}>{p.name.split(' ').pop()}</div> 
+                                   <div style={{ fontSize: 9, color: "#888" }}>{p.position} - {p.team}</div>
+                                </div>
+                            </div>
+
+                            {/* DESKTOP LAYOUT: Standard horizontal - NOW CLICKABLE AVATAR */}
+                            <div className="desktop-player-info" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              {/* AVATAR CLICK = COMPARE */}
+                              <div onClick={(e) => { e.stopPropagation(); toggleCompare(p.id.toString()); }} style={{ cursor: 'pointer' }} title="Click to Compare">
+                                 <PlayerAvatar team={p.team as TeamAbbr} jerseyNumber={p.jerseyNumber} hasNews={isExpanded} availability={p.availability} isSelected={isChecked} />
                               </div>
-                            </td>
-                            <td style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-                              <PlayerAvatar team={p.team as TeamAbbr} jerseyNumber={p.jerseyNumber} hasNews={isExpanded} availability={p.availability} />
+                              
                               <div>
                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                   <span style={{ fontWeight: 700, fontSize: 14 }}>{p.name}</span>
@@ -1118,12 +1172,13 @@ const toggleStat = (key: StatKey) => {
                                   <span style={{ color: "#aaa" }}>| Age {p.info?.age}</span>
                                 </div>
                                 <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
-                                  {getTools(p).map((t, i) => (
+                                  {getTools(p).map((t: any, i: number) => (
                                     <span key={i} title={t.name} style={{ fontSize: 9, fontWeight: 900, color: t.color, border: `1px solid ${t.color}40`, padding: "1px 4px", borderRadius: 4 }}>{t.label}</span>
                                   ))}
                                 </div>
                               </div>
-                            </td>
+                            </div>
+                          </td>
                           {selectedStatKeys.map(k => {
                       const isBatterStat = BATTER_STATS.includes(k);
                       const isPitcherStat = PITCHER_STATS.includes(k);
