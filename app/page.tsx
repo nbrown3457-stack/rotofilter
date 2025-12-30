@@ -965,10 +965,25 @@ const toggleStat = (key: StatKey) => {
                           </th>
                         );
                       })}
-                      <th onClick={() => handleSort('dynaScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_DYNASTY_PURPLE }}>Dynasty</th>
-                      <th onClick={() => handleSort('rotoScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_DARK_GREEN }}>Roto</th>
-                      <th onClick={() => handleSort('pointsScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: "#0288d1" }}>Points</th> 
-                      <th onClick={() => handleSort('rangeScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_RANGE_ORANGE }}>Range</th>
+                    {/* 1. DYNASTY */}
+<th onClick={() => handleSort('dynaScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_DYNASTY_PURPLE }}>
+  Dyna
+</th>
+
+{/* 2. ROTO */}
+<th onClick={() => handleSort('rotoScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_DARK_GREEN }}>
+  Roto
+</th>
+
+{/* 3. POINTS */}
+<th onClick={() => handleSort('pointsScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: "#0288d1" }}>
+  Points
+</th> 
+
+{/* 4. OVERALL (Formerly Range) */}
+<th onClick={() => handleSort('rangeScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: "#d84315" }}>
+  Overall
+</th>
                     </tr>
                   </thead>
                   <tbody>
