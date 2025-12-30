@@ -117,14 +117,16 @@ const PulseStyles = () => (
 type BatterPos = "C" | "1B" | "2B" | "3B" | "SS" | "OF" | "DH";
 type PitcherPos = "SP" | "RP";
 type Position = BatterPos | PitcherPos | "batters" | "pitchers";
-type Level = "all" | "mlb" | "prospects";
+// ✅ UPDATED: Added rookies to Level type
+type Level = "all" | "mlb" | "prospects" | "rookies";
 type LeagueStatus = "all" | "available" | "rostered" | "my_team";
 type FilterTab = "recommended" | "expert" | "my_filters";
 type StatViewMode = "actual" | "pace";
 
 const AL_TEAMS = ["BAL","BOS","CWS","CLE","DET","HOU","KC","LAA","MIN","NYY","OAK","SEA","TB","TEX","TOR"] as const;
 const NL_TEAMS = ["ARI","ATL","CHC","CIN","COL","LAD","MIA","MIL","NYM","PHI","PIT","SD","SF","STL","WSH"] as const;
-const ALL_TEAMS = [...AL_TEAMS, ...NL_TEAMS];
+// ✅ UPDATED: Alphabetical sort for teams
+const ALL_TEAMS = [...AL_TEAMS, ...NL_TEAMS].sort();
 const BATTER_POSITIONS: Position[] = ["C", "1B", "2B", "3B", "SS", "OF", "DH"];
 const PITCHER_POSITIONS: Position[] = ["SP", "RP"];
 const ALL_POSITIONS: Position[] = [...BATTER_POSITIONS, ...PITCHER_POSITIONS];
@@ -490,7 +492,17 @@ useEffect(() => {
     if (leagueStatus === "rostered") { if (p.availability !== "MY_TEAM" && p.availability !== "ROSTERED") return false; }
 
       if (selectedPositions.length > 0 && !selectedPositions.includes(p.position as Position)) return false;
-      if (level !== "all" && p.level !== level) return false;
+      
+      // ✅ UPDATED: Level Logic to include Rookies
+      if (level !== "all") {
+         if (level === "rookies") {
+             // ⚠️ Checks for rookie status (assumes is_rookie or level='rookie')
+             if (!p.is_rookie && p.level !== 'rookie') return false; 
+         } else {
+             if (p.level !== level) return false;
+         }
+      }
+
       if (!selectedTeams.includes(p.team as TeamAbbr)) return false;
       if (searchQuery && !p.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       if (minTools > 0 && getTools(p).length < minTools) return false;
@@ -720,8 +732,6 @@ const toggleStat = (key: StatKey) => {
           </div>
         </div>
 
-        {/* ❌ REMOVED: OLD FILTERS ROW ❌ */}
-
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
           
           {/* NEW: Full width section */}
@@ -730,16 +740,26 @@ const toggleStat = (key: StatKey) => {
             {/* IMPORTANT: overflow: visible allows the dropdowns to float outside the card */}
             <div style={{ ...cardStyle, padding: 0, overflow: "visible" }}>
               
-              {/* --- DROPDOWN STAT NAVIGATION --- */}
-              <div style={{ padding: "16px 20px 0 20px", display: "flex", gap: 8, flexWrap: "wrap", borderBottom: "1px solid #eee", background: "#f9f9f9", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+              {/* --- 1. STAT CATEGORIES (Horizontal Scroll) --- */}
+              {/* ✅ FIX: added overflowX: auto, whiteSpace: nowrap, flexWrap: nowrap */}
+              <div className="hide-scrollbar" style={{ 
+                padding: "16px 20px 0 20px", 
+                display: "flex", 
+                gap: 8, 
+                overflowX: "auto", 
+                whiteSpace: "nowrap", 
+                flexWrap: "nowrap",
+                borderBottom: "1px solid #eee", 
+                background: "#f9f9f9", 
+                borderTopLeftRadius: 16, 
+                borderTopRightRadius: 16 
+              }}>
                 {CORES.map((core) => {
                   const isOpen = openGroup === core.id;
-                  // Count active stats in this category to show a badge
                   const activeCount = CORE_STATS[core.id]?.filter(k => selectedStatKeys.includes(k)).length || 0;
 
                   return (
-                    <div key={core.id} style={{ position: "relative", paddingBottom: 12 }}>
-                      {/* Button for the category */}
+                    <div key={core.id} style={{ position: "relative", paddingBottom: 12, flexShrink: 0 }}>
                       <button 
                         onClick={() => setOpenGroup(isOpen ? null : core.id)}
                         style={{
@@ -760,7 +780,7 @@ const toggleStat = (key: StatKey) => {
 
                       {/* Dropdown Content */}
                       {isOpen && (
-                          <div className="filter-dropdown-content">
+                          <div className="filter-dropdown-content" style={{ left: 0 }}>
                             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                               {CORE_STATS[core.id]?.map((sk) => {
                                 const config = STATS[sk]; if (!config) return null; 
@@ -772,7 +792,7 @@ const toggleStat = (key: StatKey) => {
                                 const currentThreshold = statThresholds[sk] ?? minVal;
 
                                 return (
-                                  <div key={sk} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                  <div key={sk} style={{ display: "flex", flexDirection: "column", gap: "6px", whiteSpace: "normal" }}>
                                     <button disabled={isDisabled} onClick={() => toggleStat(sk)} style={{ ...baseButtonStyle, textAlign: "left", padding: "10px 12px", opacity: isDisabled ? 0.6 : 1, background: isSelected ? BUTTON_DARK_GREEN : "#fff", color: isSelected ? "#fff" : "#333", borderColor: isDisabled ? "#e0e0e0" : (isSelected ? BUTTON_DARK_GREEN : "#ddd"), display: "flex", flexDirection: "column", gap: "2px" }}>
                                       <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
                                         <span style={{ fontWeight: 800, fontSize: "12px" }}>{config.label}</span>
@@ -780,7 +800,7 @@ const toggleStat = (key: StatKey) => {
                                       </div>
                                       <div style={{ fontSize: 10, fontWeight: 400, opacity: isSelected ? 0.9 : 0.6 }}>{config.description}</div>
                                     </button>
-                                     
+                                    
                                     {isSelected && (
                                       <div style={{ padding: "12px", background: "#fff", borderRadius: "10px", border: "1px solid " + BUTTON_DARK_GREEN, marginTop: "2px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -799,68 +819,77 @@ const toggleStat = (key: StatKey) => {
                                 );
                               })}
                             </div>
-                         </div>
+                          </div>
                       )}
                     </div>
                   );
                 })}
               </div>
 
-              {/* --- NEW: COMPACT FILTER CONTROL BAR --- */}
-              <div style={{ padding: "16px 20px", borderBottom: "1px solid #eee", background: "#fff" }}>
-                {/* Row 1: League Status / Level / Positions */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center", marginBottom: 12 }}>
-                  
-                  {/* LEAGUE SCOPE */}
-                  <div style={{ display: "flex", gap: 4 }}>
-                     {[
-                        { key: "all", label: "All" },
-                        { key: "available", label: "FA" },    
-                        { key: "my_team", label: "My Team" },            
-                        { key: "rostered", label: "Rostered" }       
-                      ].map((opt) => { 
-                        const isLocked = !isUserPaid && opt.key !== "all"; 
-                        return (
-                          <button 
-                            key={opt.key} 
-                            onClick={() => !isLocked && setLeagueStatus(opt.key as LeagueStatus)} 
-                            style={{ ...baseButtonStyle, padding: "4px 8px", fontSize: 11, ...(leagueStatus === opt.key ? selectedButtonStyle : null), opacity: isLocked ? 0.6 : 1, cursor: isLocked ? "not-allowed" : "pointer" }}
-                          >
-                            {opt.label}{isLocked && <Icons.LockSmall />}
-                          </button>
-                        ); 
-                      })}
-                  </div>
-
-                  <div style={{ width: 1, height: 20, background: "#eee" }} />
-
-                  {/* LEVEL */}
-                  <div style={{ display: "flex", gap: 4 }}>
-                     {(["all", "mlb", "prospects"] as const).map(v => (
-                      <button key={v} onClick={() => setLevel(v)} style={{ ...baseButtonStyle, padding: "4px 8px", fontSize: 11, ...(level === v ? selectedButtonStyle : null) }}>
-                        {toTitleCase(v)}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div style={{ width: 1, height: 20, background: "#eee" }} />
-
-                  {/* POSITIONS */}
-                  <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
-                     <button onClick={() => setSelectedPositions([])} style={{ ...baseButtonStyle, padding: "4px 8px", fontSize: 11, ...(selectedPositions.length === 0 ? selectedButtonStyle : null) }}>All</button>
-                     <button onClick={() => setSelectedPositions([...BATTER_POSITIONS])} style={{ ...baseButtonStyle, padding: "4px 8px", fontSize: 11, ...(BATTER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Batters</button>
-                     <button onClick={() => setSelectedPositions([...PITCHER_POSITIONS])} style={{ ...baseButtonStyle, padding: "4px 8px", fontSize: 11, ...(PITCHER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Pitchers</button>
-                     
-                     <div style={{ display: "flex", gap: 4, marginLeft: 6 }}>
-                       {ALL_POSITIONS.map(p => (
-                         <button key={p} onClick={() => setSelectedPositions(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])} style={{ ...baseButtonStyle, width: 24, height: 24, padding: 0, borderRadius: "50%", fontSize: 9, ...(selectedPositions.includes(p) ? selectedButtonStyle : null) }}>{p}</button>
-                       ))}
-                     </div>
-                  </div>
+              {/* --- 2. COMPACT SUPER ROW (Horizontal Scroll) --- */}
+              {/* ✅ FIX: Combined Level, Type, and Positions into one scrollable row */}
+              <div className="hide-scrollbar" style={{ padding: "12px 20px", borderBottom: "1px solid #eee", background: "#fff", display: "flex", gap: 10, overflowX: "auto", alignItems: "center" }}>
+                
+                {/* A. SCOPE (Available/Rostered/etc) - Kept here but scrollable if screen is tiny */}
+                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                   {[
+                      { key: "all", label: "All" },
+                      { key: "available", label: "FA" },    
+                      { key: "my_team", label: "My Team" },                  
+                      { key: "rostered", label: "Rostered" }       
+                    ].map((opt) => { 
+                      const isLocked = !isUserPaid && opt.key !== "all"; 
+                      return (
+                        <button 
+                          key={opt.key} 
+                          onClick={() => !isLocked && setLeagueStatus(opt.key as LeagueStatus)} 
+                          style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(leagueStatus === opt.key ? selectedButtonStyle : null), opacity: isLocked ? 0.6 : 1, cursor: isLocked ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}
+                        >
+                          {opt.label}{isLocked && <Icons.LockSmall />}
+                        </button>
+                      ); 
+                    })}
                 </div>
 
-                {/* Row 2: Teams (Scrollable) */}
-                <TeamScrollRow />
+                <div style={{ width: 1, height: 24, background: "#eee", flexShrink: 0 }} />
+
+                {/* B. LEVELS & GROUPS (Mixed Row) */}
+                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                    {/* ALL Reset */}
+                    <button onClick={() => { setLevel("all"); setSelectedPositions([]); }} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "all" && selectedPositions.length === 0 ? selectedButtonStyle : null) }}>All</button>
+                    
+                    {/* MLB */}
+                    <button onClick={() => setLevel("mlb")} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "mlb" ? selectedButtonStyle : null) }}>MLB</button>
+                    
+                    {/* ROOKIES (New) */}
+                    <button onClick={() => setLevel("rookies" as any)} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "rookies" as any ? selectedButtonStyle : null) }}>Rookies</button>
+
+                    {/* MiLB (Renamed from Prospects) */}
+                    <button onClick={() => setLevel("prospects")} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "prospects" ? selectedButtonStyle : null) }}>MiLB</button>
+                </div>
+
+                <div style={{ width: 1, height: 24, background: "#eee", flexShrink: 0 }} />
+
+                {/* C. TYPES */}
+                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                   <button onClick={() => setSelectedPositions([...BATTER_POSITIONS])} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(BATTER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Batters</button>
+                   <button onClick={() => setSelectedPositions([...PITCHER_POSITIONS])} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(PITCHER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Pitchers</button>
+                </div>
+
+                <div style={{ width: 1, height: 24, background: "#eee", flexShrink: 0 }} />
+
+                {/* D. INDIVIDUAL POSITIONS */}
+                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                   {ALL_POSITIONS.map(p => (
+                      <button key={p} onClick={() => setSelectedPositions(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])} style={{ ...baseButtonStyle, width: 28, height: 28, padding: 0, borderRadius: "50%", fontSize: 10, ...(selectedPositions.includes(p) ? selectedButtonStyle : null), flexShrink: 0 }}>{p}</button>
+                   ))}
+                </div>
+
+              </div>
+
+              {/* --- 3. TEAMS ROW (Alphabetical) --- */}
+              <div style={{ padding: "8px 20px", background: "#fff", borderBottom: "1px solid #eee" }}>
+                 <TeamScrollRow />
               </div>
 
               {/* --- RESULTS BAR --- */}
