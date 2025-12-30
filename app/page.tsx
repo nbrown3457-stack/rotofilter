@@ -207,9 +207,10 @@ const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline, availability }: a
   );
 };
 
+// ✅ UPDATED: ToolLegend with overflow auto and nowrap to enable scrolling on mobile
 const ToolLegend = () => (
-  <div style={{ display: "flex", gap: 16, padding: "10px 16px", background: "#f5f5f5", borderRadius: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-    <div style={{ fontSize: 10, fontWeight: 700, color: "#666", textTransform: "uppercase" }}>Key:</div>
+  <div className="hide-scrollbar" style={{ display: "flex", gap: 16, padding: "10px 16px", background: "#f5f5f5", borderRadius: 8, marginBottom: 12, alignItems: "center", overflowX: "auto", whiteSpace: "nowrap" }}>
+    <div style={{ fontSize: 10, fontWeight: 700, color: "#666", textTransform: "uppercase", marginRight: 4 }}>Key:</div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#4caf50", background: "#e8f5e9", padding: "2px 6px", borderRadius: 4 }}>H</span><span style={{ fontSize: 10, color: "#555" }}>Hit (AVG &gt; .275)</span></div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#f44336", background: "#ffebee", padding: "2px 6px", borderRadius: 4 }}>P</span><span style={{ fontSize: 10, color: "#555" }}>Power (ISO &gt; .200)</span></div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#2196f3", background: "#e3f2fd", padding: "2px 6px", borderRadius: 4 }}>S</span><span style={{ fontSize: 10, color: "#555" }}>Speed (Spd &gt; 28)</span></div>
@@ -826,65 +827,70 @@ const toggleStat = (key: StatKey) => {
                 })}
               </div>
 
-              {/* --- 2. COMPACT SUPER ROW (Horizontal Scroll) --- */}
-              {/* ✅ FIX: Combined Level, Type, and Positions into one scrollable row */}
-              <div className="hide-scrollbar" style={{ padding: "12px 20px", borderBottom: "1px solid #eee", background: "#fff", display: "flex", gap: 10, overflowX: "auto", alignItems: "center" }}>
-                
-                {/* A. SCOPE (Available/Rostered/etc) - Kept here but scrollable if screen is tiny */}
-                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                   {[
-                      { key: "all", label: "All" },
-                      { key: "available", label: "FA" },    
-                      { key: "my_team", label: "My Team" },                  
-                      { key: "rostered", label: "Rostered" }       
-                    ].map((opt) => { 
-                      const isLocked = !isUserPaid && opt.key !== "all"; 
-                      return (
-                        <button 
-                          key={opt.key} 
-                          onClick={() => !isLocked && setLeagueStatus(opt.key as LeagueStatus)} 
-                          style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(leagueStatus === opt.key ? selectedButtonStyle : null), opacity: isLocked ? 0.6 : 1, cursor: isLocked ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}
-                        >
-                          {opt.label}{isLocked && <Icons.LockSmall />}
-                        </button>
-                      ); 
-                    })}
-                </div>
+              {/* --- 2. COMPACT SUPER ROW (Split into 2 Rows) --- */}
+              <div style={{ background: "#fff", borderBottom: "1px solid #eee" }}>
+                  
+                  {/* ROW 1: SCOPE (FA/My Team) & LEVELS (All, MLB, Rookies) */}
+                  <div className="hide-scrollbar" style={{ display: "flex", gap: 10, padding: "12px 20px 6px 20px", overflowX: "auto", alignItems: "center" }}>
+                      
+                      {/* A. SCOPE */}
+                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                          {[
+                            { key: "all", label: "All" },
+                            { key: "available", label: "FA" },    
+                            { key: "my_team", label: "My Team" },                   
+                            { key: "rostered", label: "Rostered" }       
+                          ].map((opt) => { 
+                            const isLocked = !isUserPaid && opt.key !== "all"; 
+                            return (
+                              <button 
+                                key={opt.key} 
+                                onClick={() => !isLocked && setLeagueStatus(opt.key as LeagueStatus)} 
+                                style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(leagueStatus === opt.key ? selectedButtonStyle : null), opacity: isLocked ? 0.6 : 1, cursor: isLocked ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}
+                              >
+                                {opt.label}{isLocked && <Icons.LockSmall />}
+                              </button>
+                            ); 
+                          })}
+                      </div>
 
-                <div style={{ width: 1, height: 24, background: "#eee", flexShrink: 0 }} />
+                      <div style={{ width: 1, height: 20, background: "#eee", flexShrink: 0 }} />
 
-                {/* B. LEVELS & GROUPS (Mixed Row) */}
-                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                    {/* ALL Reset */}
-                    <button onClick={() => { setLevel("all"); setSelectedPositions([]); }} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "all" && selectedPositions.length === 0 ? selectedButtonStyle : null) }}>All</button>
-                    
-                    {/* MLB */}
-                    <button onClick={() => setLevel("mlb")} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "mlb" ? selectedButtonStyle : null) }}>MLB</button>
-                    
-                    {/* ROOKIES (New) */}
-                    <button onClick={() => setLevel("rookies" as any)} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "rookies" as any ? selectedButtonStyle : null) }}>Rookies</button>
+                      {/* B. LEVELS */}
+                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                          <button onClick={() => { setLevel("all"); setSelectedPositions([]); }} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "all" && selectedPositions.length === 0 ? selectedButtonStyle : null) }}>All</button>
+                          <button onClick={() => setLevel("mlb")} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "mlb" ? selectedButtonStyle : null) }}>MLB</button>
+                          <button onClick={() => setLevel("rookies" as any)} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "rookies" as any ? selectedButtonStyle : null) }}>Rookies</button>
+                          <button onClick={() => setLevel("prospects")} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "prospects" ? selectedButtonStyle : null) }}>MiLB</button>
+                      </div>
 
-                    {/* MiLB (Renamed from Prospects) */}
-                    <button onClick={() => setLevel("prospects")} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "prospects" ? selectedButtonStyle : null) }}>MiLB</button>
-                </div>
+                  </div>
 
-                <div style={{ width: 1, height: 24, background: "#eee", flexShrink: 0 }} />
+                  {/* ROW 2: TYPES & POSITIONS */}
+                  <div className="hide-scrollbar" style={{ display: "flex", gap: 10, padding: "0 20px 12px 20px", overflowX: "auto", alignItems: "center" }}>
+                      
+                      {/* C. TYPES (Added 'All' button here) */}
+                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                          <button 
+                            onClick={() => setSelectedPositions([])} 
+                            style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(selectedPositions.length === 0 ? selectedButtonStyle : null) }}
+                          >
+                            All
+                          </button>
+                          <button onClick={() => setSelectedPositions([...BATTER_POSITIONS])} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(BATTER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Batters</button>
+                          <button onClick={() => setSelectedPositions([...PITCHER_POSITIONS])} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(PITCHER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Pitchers</button>
+                      </div>
 
-                {/* C. TYPES */}
-                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                   <button onClick={() => setSelectedPositions([...BATTER_POSITIONS])} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(BATTER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Batters</button>
-                   <button onClick={() => setSelectedPositions([...PITCHER_POSITIONS])} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(PITCHER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Pitchers</button>
-                </div>
+                      <div style={{ width: 1, height: 20, background: "#eee", flexShrink: 0 }} />
 
-                <div style={{ width: 1, height: 24, background: "#eee", flexShrink: 0 }} />
+                      {/* D. POSITIONS */}
+                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                          {ALL_POSITIONS.map(p => (
+                            <button key={p} onClick={() => setSelectedPositions(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])} style={{ ...baseButtonStyle, width: 28, height: 28, padding: 0, borderRadius: "50%", fontSize: 10, ...(selectedPositions.includes(p) ? selectedButtonStyle : null), flexShrink: 0 }}>{p}</button>
+                          ))}
+                      </div>
 
-                {/* D. INDIVIDUAL POSITIONS */}
-                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                   {ALL_POSITIONS.map(p => (
-                      <button key={p} onClick={() => setSelectedPositions(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])} style={{ ...baseButtonStyle, width: 28, height: 28, padding: 0, borderRadius: "50%", fontSize: 10, ...(selectedPositions.includes(p) ? selectedButtonStyle : null), flexShrink: 0 }}>{p}</button>
-                   ))}
-                </div>
-
+                  </div>
               </div>
 
               {/* --- 3. TEAMS ROW (Alphabetical) --- */}
@@ -899,12 +905,7 @@ const toggleStat = (key: StatKey) => {
                   <span style={{ fontWeight: 900, fontSize: 18 }}>Results</span>
                   {loading ? <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#666" }}><Icons.Spinner /> Scouting...</span> : <span style={{ fontSize: 11, fontWeight: 800, color: BUTTON_DARK_GREEN, background: "#e8f5e9", padding: "4px 10px", borderRadius: 20 }}>{filteredPlayers.length} Found</span>}
                   
-                  <select value={minTools} onChange={(e) => setMinTools(Number(e.target.value))} style={{ ...baseButtonStyle, fontSize: 11, padding: "4px 8px", height: 28, background: "#fff3e0", color: "#e65100", borderColor: "#ffe0b2", fontWeight: 700 }}>
-                    <option value="0">Tool Filter: All</option>
-                    <option value="1">1+ Elite Tool</option>
-                    <option value="2">2+ Elite Tools</option>
-                    <option value="3">3+ Elite Tools</option>
-                  </select>
+                  {/* ✅ DELETED: Tool Filter Select (minTools) removed as requested */}
 
                   <button onClick={handleGlobalReset} style={{...baseButtonStyle, fontSize: 10, padding: "4px 10px", background: "#fdecea", color: "#721c24", borderColor: "#f5c6cb"}}>Reset</button>
                   <button onClick={saveCurrentFilter} title="Save current filter" style={{...baseButtonStyle, fontSize: 10, padding: "4px 10px", background: "#e3f2fd", color: "#0d47a1", borderColor: "#90caf9", display: "flex", alignItems: "center", gap: 4}}><Icons.Save /> Save</button>
@@ -914,8 +915,9 @@ const toggleStat = (key: StatKey) => {
                   )}
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginLeft: "auto" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", padding: "4px 8px", borderRadius: "8px", border: "1px solid #eee" }}>
+                {/* ✅ UPDATED: Date & Search in a container that stays side-by-side on mobile */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: "auto", overflowX: "auto", flexWrap: "nowrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", padding: "4px 8px", borderRadius: "8px", border: "1px solid #eee", whiteSpace: "nowrap", flexShrink: 0 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: "#999", textTransform: "uppercase", marginRight: 2 }}>📅 Range:</span>
                     <select value={dateRange} onChange={(e) => setDateRange(e.target.value as DateRangeOption)} style={{ ...baseButtonStyle, padding: "4px 8px", fontSize: 11, height: "28px", borderRadius: "6px" }}>
                       <option value="season_curr">Current Season</option>
@@ -937,7 +939,7 @@ const toggleStat = (key: StatKey) => {
                       </>
                     )}
                   </div>
-                  <input type="text" placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ padding: "8px 16px", borderRadius: 20, border: "1px solid #ddd", fontSize: 13, outline: "none", width: "clamp(150px, 20vw, 200px)" }} />
+                  <input type="text" placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ padding: "8px 16px", borderRadius: 20, border: "1px solid #ddd", fontSize: 13, outline: "none", width: "clamp(120px, 20vw, 200px)", flexShrink: 1 }} />
                 </div>
               </div>
 
@@ -998,7 +1000,7 @@ const toggleStat = (key: StatKey) => {
                                   <span style={{ fontSize: 9, fontWeight: 800, color: "#666", background: "#eee", padding: "1px 4px", borderRadius: 3 }}>{p.position}</span>
                                   {p.availability === 'MY_TEAM' && (<span style={{ fontSize: 9, fontWeight: 900, color: "#fff", background: "#4caf50", padding: "1px 6px", borderRadius: 10 }}>OWNED</span>)}
                                   {p.availability === 'ROSTERED' && (<span style={{ fontSize: 9, fontWeight: 900, color: "#888", border: "1px solid #888", padding: "1px 6px", borderRadius: 10 }}>TAKEN</span>)}
-                                  {getTrajectory(p) && <span style={{ fontSize: 9, fontWeight: 800, color: getTrajectory(p)!.color, background: getTrajectory(p)!.bg, padding: "1px 4px", borderRadius: 4 }}>{getTrajectory(p)!.label}</span>}
+                                  {getTrajectory(p) && <span style={{ fontSize: 9, fontWeight: 800, color: getTrajectory(p)!.label, background: getTrajectory(p)!.bg, padding: "1px 4px", borderRadius: 4 }}>{getTrajectory(p)!.label}</span>}
                                 </div>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: "#555", marginTop: 2, fontFamily: "system-ui", display: "flex", gap: "6px", alignItems: "center" }}>
                                   {isPitcher ? (
