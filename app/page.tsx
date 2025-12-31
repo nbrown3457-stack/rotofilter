@@ -1,11 +1,9 @@
 "use client";
 
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/app/utils/supabase/client"; 
 
-/* =============================================================================
-   SECTION 0 — Imports
-============================================================================= */
-// 1. GO UP ONE LEVEL (..) to find components
+/* --- 1. COMPONENTS --- */
 import { PlayerDetailPopup } from "../components/PlayerDetailPopup";
 import { PlayerNewsFeed } from "../components/PlayerNewsFeed";
 import LeagueSyncModal from "../components/LeagueSyncModal"; 
@@ -13,143 +11,25 @@ import { Icons } from "../components/Icons";
 import { UserMenu } from "../components/UserMenu"; 
 import TeamSwitcher from "../components/TeamSwitcher"; 
 import { useTeam } from '../context/TeamContext';
+import { NewsDrawer } from "../components/NewsDrawer"; // <--- NEW IMPORT
+import { Newspaper } from "lucide-react"; // <--- NEW IMPORT
 
-// 2. GO UP ONE LEVEL (..) to find config
+/* --- 2. CONFIG & TYPES --- */
 import type { CoreId } from "../config/cores";
 import { CORES } from "../config/cores";
 import { CORE_STATS } from "../config/corestats";
-import { STATS } from "../config/stats";
-import type { StatKey } from "../config/stats";
+import { STATS, type StatKey } from "../config/stats";
 
-// 3. LOOK INSIDE CURRENT FOLDER (.) to find utils
+/* --- 3. UTILS --- */
 import { 
-  toTitleCase, 
   getTools, 
   getTrajectory, 
-  enrichPlayerData,
+  enrichPlayerData, 
   type DateRangeOption 
 } from "./utils/playerAnalysis";
 
-// 4. Standard Libraries
-import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
-
 /* =============================================================================
-   SECTION 0.5 — Local Icons & Styles
-============================================================================= */
-
-// Simple SVGs for the Category Pills
-const CategoryIcons = {
-  Context: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>,
-  Bat: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l12 12 3-3-12-12z" /></svg>,
-  Power: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.5-3.3a9 9 0 0 0 3 3.3z"></path></svg>,
-  Eye: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>,
-  Target: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>,
-  Speed: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>,
-  Ball: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2v20"></path></svg>,
-  Stuff: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>,
-  Check: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-};
-
-const PulseStyles = () => (
-  <style dangerouslySetInnerHTML={{ __html: `
-    @keyframes pulse-ring { 0% { transform: scale(0.33); opacity: 1; } 80%, 100% { opacity: 0; } }
-    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .news-pulse { position: absolute; top: -2px; right: -2px; width: 12px; height: 12px; background-color: #ff1744; border-radius: 50%; border: 2px solid white; z-index: 10; }
-    .news-pulse::after { content: ''; position: absolute; top: -2px; left: -2px; width: 12px; height: 12px; background-color: #ff1744; border-radius: 50%; animation: pulse-ring 1.25s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
-    .active-row { background-color: #f0f7ff !important; }
-    .sticky-container { overflow: auto; max-height: 800px; position: relative; }
-    .sticky-table { border-collapse: separate; border-spacing: 0; width: 100%; }
-    .sticky-table thead th { position: sticky; top: 0; z-index: 20; background: #fafafa; box-shadow: inset 0 -1px 0 #eee; cursor: pointer; user-select: none; }
-    
-    /* === UNIVERSAL STICKY COLUMN LOGIC (Column 1 is Player Name) === */
-    /* Sticky behavior for the 1st column (Player Identity) */
-    .sticky-table td:nth-child(1), .sticky-table th:nth-child(1) { 
-        position: sticky; 
-        left: 0; 
-        z-index: 30; 
-        background: white; 
-    }
-    .sticky-table th:nth-child(1) { 
-        z-index: 40; 
-        background: #fafafa; 
-    }
-    /* Border line after sticky column */
-    .sticky-table td:nth-child(1)::after, .sticky-table th:nth-child(1)::after { 
-        content: ""; 
-        position: absolute; 
-        right: 0; 
-        top: 0; 
-        bottom: 0; 
-        width: 1px; 
-        background: #eee; 
-    }
-    .active-row td:nth-child(1) { background-color: #f0f7ff !important; }
-    
-    footer a:hover { color: #4caf50 !important; text-decoration: underline; }
-    .preset-card { transition: all 0.2s ease; border: 1px solid rgba(255,255,255,0.1); }
-    .preset-card:hover { transform: translateY(-4px); border-color: #1b5e20; box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
-    .compare-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 2000; display: flex; justify-content: center; align-items: center; padding: 20px; backdrop-filter: blur(5px); }
-    .compare-modal-content { background: #fff; width: 100%; max-width: 1000px; max-height: 90vh; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
-    .custom-checkbox { width: 16px; height: 16px; border: 2px solid #ccc; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: #fff; }
-    .custom-checkbox.checked { background: #1b5e20; border-color: #1b5e20; }
-    .beta-banner { background: linear-gradient(90deg, #1b5e20 0%, #2e7d32 100%); color: rgba(255,255,255,0.9); text-align: center; padding: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-    .nav-link { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 13px; font-weight: 700; padding: 8px 12px; border-radius: 6px; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px; }
-    .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
-    .nav-link.active { color: #fff; background: #1b5e20; }
-    .mobile-floating-bar { display: none; }
-    .desktop-nav-links { display: flex; }
-    .mobile-bottom-nav { display: none; }
-    
-    .hide-scrollbar::-webkit-scrollbar { display: none; }
-    .hide-scrollbar { -ms-overflow-style: none;  scrollbar-width: none; }
-
-    .wide-container { width: 98%; max-width: 2500px; margin: 0 auto; }
-    .main-padding { padding: 8px; }
-
-    /* --- MOBILE OVERRIDES (THE YAHOO FIX) --- */
-    @media (max-width: 768px) {
-      .wide-container { width: 99.5%; } 
-      .main-padding { padding: 4px !important; }
-      .desktop-nav-links { display: none !important; }
-      
-      /* FIXED IDENTITY COLUMN (Col 1) - Narrow & Sticky on Mobile */
-      .sticky-table th:nth-child(1), .sticky-table td:nth-child(1) {
-         width: 80px !important;
-         min-width: 80px !important;
-         max-width: 80px !important;
-         padding: 8px 4px !important;
-         box-shadow: 2px 0 6px rgba(0,0,0,0.15); /* The "Floating" Shadow */
-         z-index: 50;
-      }
-      
-      /* Hide detailed info on mobile, show stacked */
-      .desktop-player-info { display: none !important; }
-      .mobile-player-info { display: flex !important; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
-      
-      .mobile-floating-bar { display: flex; position: fixed; top: 64px; left: 0; right: 0; z-index: 90; background: rgba(27, 94, 32, 0.95); backdrop-filter: blur(8px); padding: 10px 20px; align-items: center; justify-content: space-between; color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); animation: slideDown 0.3s ease-out; }
-      @keyframes slideDown { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-      .mobile-bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; right: 0; background: #121212; border-top: 1px solid #2a2a2a; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); height: 60px; align-items: center; overflow-x: auto; justify-content: flex-start; box-shadow: 0 -4px 15px rgba(0,0,0,0.5); }
-      .mobile-bottom-nav::-webkit-scrollbar { display: none; }
-      .mobile-nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #777; font-size: 9px; font-weight: 600; text-decoration: none; min-width: 72px; height: 100%; gap: 4px; transition: color 0.2s ease; }
-      .mobile-nav-item.active { color: #fff; }
-      .mobile-nav-item.active svg { stroke: #4caf50; }
-      footer { padding-bottom: 80px !important; }
-    }
-    * { box-sizing: border-box; }
-    html, body { overflow-x: hidden; width: 100%; margin: 0; padding: 0; }
-    @media (max-width: 600px) {
-      .upgrade-btn { padding: 4px 10px !important; font-size: 10px !important; border-radius: 12px !important; }
-      .nav-logo-text { font-size: 16px !important; }
-      .nav-logo-subtext { display: none; }
-    }
-    
-    /* Animation for the filter tray */
-    @keyframes slideDownTray { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-  `}} />
-);
-
-/* =============================================================================
-   SECTION 1 — Types & Constants
+   CONSTANTS & STATIC DATA
 ============================================================================= */
 type BatterPos = "C" | "1B" | "2B" | "3B" | "SS" | "OF" | "DH";
 type PitcherPos = "SP" | "RP";
@@ -157,7 +37,7 @@ type Position = BatterPos | PitcherPos | "batters" | "pitchers";
 type Level = "all" | "mlb" | "prospects" | "rookies";
 type LeagueStatus = "all" | "available" | "rostered" | "my_team";
 type FilterTab = "recommended" | "expert" | "my_filters";
-type StatViewMode = "actual" | "pace";
+type TeamAbbr = (typeof ALL_TEAMS)[number];
 
 const AL_TEAMS = ["BAL","BOS","CWS","CLE","DET","HOU","KC","LAA","MIN","NYY","OAK","SEA","TB","TEX","TOR"] as const;
 const NL_TEAMS = ["ARI","ATL","CHC","CIN","COL","LAD","MIA","MIL","NYM","PHI","PIT","SD","SF","STL","WSH"] as const;
@@ -166,7 +46,14 @@ const BATTER_POSITIONS: Position[] = ["C", "1B", "2B", "3B", "SS", "OF", "DH"];
 const PITCHER_POSITIONS: Position[] = ["SP", "RP"];
 const ALL_POSITIONS: Position[] = [...BATTER_POSITIONS, ...PITCHER_POSITIONS];
 
-type TeamAbbr = (typeof ALL_TEAMS)[number];
+const COLORS = {
+  DARK_GREEN: "#1b5e20",
+  DYNASTY_PURPLE: "#6a1b9a", 
+  RANGE_ORANGE: "#e65100",
+  LIGHT_GREEN_BG: "#e8f5e9",
+  GRAY_TEXT: "#666",
+  BORDER: "rgba(0,0,0,0.12)"
+};
 
 const TEAM_PRIMARY: Record<TeamAbbr, string> = {
   ARI: "#A71930", ATL: "#CE1141", BAL: "#DF4601", BOS: "#BD3039", CHC: "#0E3386",
@@ -176,11 +63,6 @@ const TEAM_PRIMARY: Record<TeamAbbr, string> = {
   PHI: "#E81828", PIT: "#FDB827", SD:  "#2F241D", SEA: "#0C2C56", SF:  "#FD5A1E",
   STL: "#C41E3A", TB:  "#092C5C", TEX: "#003278", TOR: "#134A8E", WSH: "#AB0003",
 };
-
-// 🔥 DEFINE ALL COLORS
-const BUTTON_DARK_GREEN = "#1b5e20";
-const BUTTON_DYNASTY_PURPLE = "#6a1b9a"; 
-const BUTTON_RANGE_ORANGE = "#e65100";
 
 const BATTER_STATS = [
   'hr', 'rbi', 'sb', 'avg', 'ops', 'obp', 'slg', 'iso', 'wrc_plus',
@@ -200,36 +82,115 @@ const PITCHER_STATS = [
   'arm_value', 'arm_strength', 'fielding_runs' 
 ];
 
+/* --- STYLES OBJECTS (Cleanup) --- */
+const STYLES = {
+  btnBase: {
+    padding: "6px 10px", borderRadius: 8, borderWidth: "1px", borderStyle: "solid",
+    borderColor: COLORS.BORDER, background: "#ffffff", color: "#333",
+    cursor: "pointer", fontWeight: 600, fontSize: "12px", transition: "all 0.1s ease",
+  } as React.CSSProperties,
+   
+  btnSelected: { background: COLORS.DARK_GREEN, borderColor: COLORS.DARK_GREEN, color: "#ffffff" },
+   
+  cardCompact: { 
+    borderWidth: "1px", borderStyle: "solid", borderColor: "rgba(255,255,255,0.1)", 
+    borderRadius: 12, background: "rgba(255,255,255,0.98)", padding: "12px 14px", 
+    boxShadow: "0 4px 20px rgba(0,0,0,0.2)", display: "flex", flexDirection: "column", width: "100%",
+    gap: "8px", transition: "all 0.2s ease"
+  } as React.CSSProperties,
+
+  label: { fontWeight: 800, fontSize: 10, color: COLORS.GRAY_TEXT, textTransform: "uppercase", letterSpacing: "0.8px" } as React.CSSProperties
+};
+
+/* --- ICONS --- */
+const CategoryIcons = {
+  Context: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>,
+  Bat: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l12 12 3-3-12-12z" /></svg>,
+  Power: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.5-3.3a9 9 0 0 0 3 3.3z"></path></svg>,
+  Eye: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>,
+  Target: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>,
+  Speed: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>,
+  Ball: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2v20"></path></svg>,
+  Stuff: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>,
+  Check: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+};
+
+const CATEGORY_DISPLAY: Record<string, { label: string; icon: any }> = {
+  "profile":          { label: "Context",    icon: CategoryIcons.Context },
+  "std_hit":          { label: "Basic Bat",  icon: CategoryIcons.Bat },
+  "power":            { label: "Power",      icon: CategoryIcons.Power },
+  "discipline":       { label: "Discipline", icon: CategoryIcons.Eye },
+  "contact":          { label: "Contact",    icon: CategoryIcons.Target },
+  "speed":            { label: "Speed",      icon: CategoryIcons.Speed }, 
+  "std_pitch":        { label: "Basic Arm",  icon: CategoryIcons.Ball },
+  "pitch_shape":      { label: "Stuff",      icon: CategoryIcons.Stuff },
+  "pitch_outcomes":   { label: "Outcomes",   icon: CategoryIcons.Check },
+};
+
+/* --- GLOBAL STYLES & ANIMATIONS --- */
+const GlobalStyles = () => (
+  <style dangerouslySetInnerHTML={{ __html: `
+    @keyframes pulse-ring { 0% { transform: scale(0.33); opacity: 1; } 80%, 100% { opacity: 0; } }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .news-pulse { position: absolute; top: -2px; right: -2px; width: 12px; height: 12px; background-color: #ff1744; border-radius: 50%; border: 2px solid white; z-index: 10; }
+    .news-pulse::after { content: ''; position: absolute; top: -2px; left: -2px; width: 12px; height: 12px; background-color: #ff1744; border-radius: 50%; animation: pulse-ring 1.25s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
+    .sticky-container { overflow: auto; max-height: 800px; position: relative; }
+    .sticky-table { border-collapse: separate; border-spacing: 0; width: 100%; }
+    .sticky-table thead th { position: sticky; top: 0; z-index: 20; background: #fafafa; box-shadow: inset 0 -1px 0 #eee; cursor: pointer; user-select: none; }
+    .sticky-table td:nth-child(1), .sticky-table th:nth-child(1) { position: sticky; left: 0; z-index: 30; background: white; }
+    .sticky-table th:nth-child(1) { z-index: 40; background: #fafafa; }
+    .sticky-table td:nth-child(1)::after, .sticky-table th:nth-child(1)::after { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: #eee; }
+    .preset-card { transition: all 0.2s ease; border: 1px solid rgba(255,255,255,0.1); }
+    .preset-card:hover { transform: translateY(-4px); border-color: #1b5e20; box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
+    .compare-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 2000; display: flex; justify-content: center; align-items: center; padding: 20px; backdrop-filter: blur(5px); }
+    .compare-modal-content { background: #fff; width: 100%; max-width: 1000px; max-height: 90vh; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
+    .custom-checkbox { width: 16px; height: 16px; border: 2px solid #ccc; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: #fff; }
+    .custom-checkbox.checked { background: #1b5e20; border-color: #1b5e20; }
+    .beta-banner { background: linear-gradient(90deg, #1b5e20 0%, #2e7d32 100%); color: rgba(255,255,255,0.9); text-align: center; padding: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .nav-link { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 13px; font-weight: 700; padding: 8px 12px; border-radius: 6px; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px; }
+    .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
+    .nav-link.active { color: #fff; background: #1b5e20; }
+    .mobile-floating-bar { display: none; }
+    .desktop-nav-links { display: flex; }
+    .mobile-bottom-nav { display: none; }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none;  scrollbar-width: none; }
+    .wide-container { width: 98%; max-width: 2500px; margin: 0 auto; }
+    .main-padding { padding: 8px; }
+    @media (max-width: 768px) {
+      .wide-container { width: 99.5%; } 
+      .main-padding { padding: 4px !important; }
+      .desktop-nav-links { display: none !important; }
+      .sticky-table th:nth-child(1), .sticky-table td:nth-child(1) { width: 80px !important; min-width: 80px !important; max-width: 80px !important; padding: 8px 4px !important; box-shadow: 2px 0 6px rgba(0,0,0,0.15); z-index: 50; }
+      .desktop-player-info { display: none !important; }
+      .mobile-player-info { display: flex !important; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
+      .mobile-floating-bar { display: flex; position: fixed; top: 64px; left: 0; right: 0; z-index: 90; background: rgba(27, 94, 32, 0.95); backdrop-filter: blur(8px); padding: 10px 20px; align-items: center; justify-content: space-between; color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); animation: slideDown 0.3s ease-out; }
+      @keyframes slideDown { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      .mobile-bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; right: 0; background: #121212; border-top: 1px solid #2a2a2a; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); height: 60px; align-items: center; overflow-x: auto; justify-content: flex-start; box-shadow: 0 -4px 15px rgba(0,0,0,0.5); }
+      .mobile-nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #777; font-size: 9px; font-weight: 600; text-decoration: none; min-width: 72px; height: 100%; gap: 4px; transition: color 0.2s ease; }
+      .mobile-nav-item.active { color: #fff; }
+      .mobile-nav-item.active svg { stroke: #4caf50; }
+      footer { padding-bottom: 80px !important; }
+    }
+    * { box-sizing: border-box; }
+    html, body { overflow-x: hidden; width: 100%; margin: 0; padding: 0; }
+    @media (max-width: 600px) {
+      .upgrade-btn { padding: 4px 10px !important; font-size: 10px !important; border-radius: 12px !important; }
+      .nav-logo-text { font-size: 16px !important; }
+      .nav-logo-subtext { display: none; }
+    }
+    @keyframes slideDownTray { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+  `}} />
+);
+
 /* =============================================================================
    SECTION 3 — Sub-Components
 ============================================================================= */
-const baseButtonStyle: React.CSSProperties = {
-  padding: "6px 10px", borderRadius: 8, borderWidth: "1px", borderStyle: "solid",
-  borderColor: "rgba(0,0,0,0.12)", background: "#ffffff", color: "#333",
-  cursor: "pointer", fontWeight: 600, fontSize: "12px", transition: "all 0.1s ease",
-};
-const selectedButtonStyle: React.CSSProperties = { background: BUTTON_DARK_GREEN, borderColor: BUTTON_DARK_GREEN, color: "#ffffff" };
-const clearButtonStyle: React.CSSProperties = { ...baseButtonStyle, fontSize: 10, padding: "2px 8px", background: "#fdecea", borderColor: "#f5c6cb", color: "#721c24" };
-
-const compactCardStyle: React.CSSProperties = { 
-  borderWidth: "1px", borderStyle: "solid", borderColor: "rgba(255,255,255,0.1)", 
-  borderRadius: 12, background: "rgba(255,255,255,0.98)", padding: "12px 14px", 
-  boxShadow: "0 4px 20px rgba(0,0,0,0.2)", display: "flex", flexDirection: "column", width: "100%",
-  gap: "8px", transition: "all 0.2s ease"
-};
-const cardStyle: React.CSSProperties = { 
-  borderWidth: "1px", borderStyle: "solid", borderColor: "rgba(255,255,255,0.1)", 
-  borderRadius: 16, background: "rgba(255,255,255,0.98)", padding: 20, 
-  boxShadow: "0 10px 40px rgba(0,0,0,0.4)", display: "flex", flexDirection: "column", width: "100%"
-};
-const labelStyle: React.CSSProperties = { fontWeight: 800, fontSize: 10, color: "#666", textTransform: "uppercase", letterSpacing: "0.8px" };
-
-
 const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline, availability, isSelected }: any) => {
   const teamColor = TEAM_PRIMARY[team as TeamAbbr] || "#444";
-  
-  // Dynamic style for selection (Mobile Tap)
-  const selectionStyle = isSelected ? { border: `3px solid ${BUTTON_DARK_GREEN}`, boxShadow: `0 0 0 2px #fff inset, 0 4px 8px rgba(0,0,0,0.3)` } : { border: "2px solid #fff" };
+  const selectionStyle = isSelected 
+    ? { border: `3px solid ${COLORS.DARK_GREEN}`, boxShadow: `0 0 0 2px #fff inset, 0 4px 8px rgba(0,0,0,0.3)` } 
+    : { border: "2px solid #fff" };
 
   return (
     <div style={{ position: 'relative', flexShrink: 0 }} title={headline}>
@@ -237,10 +198,9 @@ const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline, availability, isS
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 50%)' }} />
         <span style={{ color: "#fff", fontSize: "14px", fontWeight: 900, fontFamily: "ui-monospace, monospace", position: 'relative', zIndex: 2, textShadow: "1px 1px 2px rgba(0,0,0,0.4)" }}>{jerseyNumber || "--"}</span>
         
-        {/* CHECKMARK OVERLAY IF SELECTED */}
         {isSelected && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(27, 94, 32, 0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5 }}>
-             <Icons.Check style={{ width: 18, height: 18, stroke: 'white' }} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(27, 94, 32, 0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, color: 'white', fontSize: '18px' }}>
+             <Icons.Check />
           </div>
         )}
       </div>
@@ -257,8 +217,8 @@ const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline, availability, isS
 
 const ToolLegend = () => (
   <div className="hide-scrollbar" style={{ display: "flex", gap: 16, padding: "10px 16px", background: "#f5f5f5", borderRadius: 8, marginBottom: 12, alignItems: "center", overflowX: "auto", whiteSpace: "nowrap" }}>
-    <div style={{ fontSize: 10, fontWeight: 700, color: "#666", textTransform: "uppercase", marginRight: 4 }}>Key:</div>
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#4caf50", background: "#e8f5e9", padding: "2px 6px", borderRadius: 4 }}>H</span><span style={{ fontSize: 10, color: "#555" }}>Hit (AVG &gt; .275)</span></div>
+    <div style={{ fontSize: 10, fontWeight: 700, color: COLORS.GRAY_TEXT, textTransform: "uppercase", marginRight: 4 }}>Key:</div>
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#4caf50", background: COLORS.LIGHT_GREEN_BG, padding: "2px 6px", borderRadius: 4 }}>H</span><span style={{ fontSize: 10, color: "#555" }}>Hit (AVG &gt; .275)</span></div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#f44336", background: "#ffebee", padding: "2px 6px", borderRadius: 4 }}>P</span><span style={{ fontSize: 10, color: "#555" }}>Power (ISO &gt; .200)</span></div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#2196f3", background: "#e3f2fd", padding: "2px 6px", borderRadius: 4 }}>S</span><span style={{ fontSize: 10, color: "#555" }}>Speed (Spd &gt; 28)</span></div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 10, fontWeight: 900, color: "#ff9800", background: "#fff3e0", padding: "2px 6px", borderRadius: 4 }}>D</span><span style={{ fontSize: 10, color: "#555" }}>Disc (BB% &gt; 10)</span></div>
@@ -267,38 +227,21 @@ const ToolLegend = () => (
 );
 
 /* =============================================================================
-   SECTION 4 — Main Page
+   SECTION 4 — Main Component
 ============================================================================= */
 export default function Home() {
   const supabase = createClient();
+  const { activeTeam } = useTeam();
 
-  // --- 1. STANDARD STATE ---
+  // --- STATE: DATA ---
   const [players, setPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedPlayer, setSelectedPlayer] = useState<any | null>(null);
-  const [dateRange, setDateRange] = useState<DateRangeOption>("season_curr");
-  const [customStart, setCustomStart] = useState("");
-  const [customEnd, setCustomEnd] = useState("");
-  const [compareList, setCompareList] = useState<string[]>([]);
-  const [isCompareOpen, setIsCompareOpen] = useState(false);
-  const [openGroup, setOpenGroup] = useState<CoreId | null>(null); 
+  const [user, setUser] = useState<any>(null);
   const [isUserPaid, setIsUserPaid] = useState(true); 
-  const [isMounted, setIsMounted] = useState(false);
-  const resultsTableRef = useRef<HTMLDivElement>(null);
-  const [sections, setSections] = useState({ league: true, positions: true, al: true, nl: true });
-    
-  // --- 2. NEW TEAM CONTEXT & FILTER STATE ---
-  const { activeTeam } = useTeam();
-  const isSeasonLocked = (key: string) => {
-    const isStandardHit = CORE_STATS.std_hit?.includes(key as any);
-    const isStandardPitch = CORE_STATS.std_pitch?.includes(key as any);
-    return !isStandardHit && !isStandardPitch;
-  };
-  const [leagueScope, setLeagueScope] = useState('all'); 
-  const [search, setSearch] = useState(''); 
-  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [savedFilters, setSavedFilters] = useState<any[]>([]);
 
-  // --- 3. FILTER SETTINGS ---
+  // --- STATE: FILTERS ---
+  const [openGroup, setOpenGroup] = useState<CoreId | null>(null); 
   const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
   const [selectedStatKeys, setSelectedStatKeys] = useState<StatKey[]>([]);
   const [level, setLevel] = useState<Level>("all");
@@ -309,13 +252,32 @@ export default function Home() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [statThresholds, setStatThresholds] = useState<Record<string, number>>({});
   const [minTools, setMinTools] = useState<number>(0);
+  const [dateRange, setDateRange] = useState<DateRangeOption>("season_curr");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+   
+  // --- STATE: UI ---
+  const [selectedPlayer, setSelectedPlayer] = useState<any | null>(null);
+  const [compareList, setCompareList] = useState<string[]>([]);
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("filters");
   const [presetTab, setPresetTab] = useState<FilterTab>("recommended");
-  const [savedFilters, setSavedFilters] = useState<any[]>([]);
-  const [user, setUser] = useState<any>(null);
+  const [leagueScope, setLeagueScope] = useState('all'); 
+  const [search, setSearch] = useState(''); 
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isNewsOpen, setIsNewsOpen] = useState(false); // <--- NEW STATE FOR DRAWER
+   
+  const resultsTableRef = useRef<HTMLDivElement>(null);
 
-  // --- 4. SYNC LISTENER (Opens Modal on URL Param) ---
+  // --- HELPERS ---
+  const isSeasonLocked = (key: string) => {
+    const isStandardHit = CORE_STATS.std_hit?.includes(key as any);
+    const isStandardPitch = CORE_STATS.std_pitch?.includes(key as any);
+    return !isStandardHit && !isStandardPitch;
+  };
+
+  // --- EFFECTS ---
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -328,7 +290,6 @@ export default function Home() {
     }
   }, []);
 
-// --- 5. AUTH & FILTERS LOAD ---
   const fetchSavedFilters = async (currentUser: any) => {
     if (!currentUser) return; 
     const { data, error } = await supabase.from('saved_filters').select('*').order('created_at', { ascending: false });
@@ -338,7 +299,7 @@ export default function Home() {
     }
   };
 
-useEffect(() => {
+  useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const currentUser = session?.user ?? null;
@@ -367,27 +328,6 @@ useEffect(() => {
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const syncStatus = params.get('sync');
-    const errorMsg = params.get('msg');
-
-    if (syncStatus === 'success') {
-      setIsSyncModalOpen(true);
-      window.history.replaceState({}, '', window.location.pathname);
-    } else if (syncStatus === 'error') {
-      alert(`Yahoo Connection Failed: ${decodeURIComponent(errorMsg || "Unknown error")}`);
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    setIsMounted(true);
-    const saved = localStorage.getItem('rotofilter_presets');
-    if (saved) setSavedFilters(JSON.parse(saved));
-  }, []);
-
-  // --- UPDATED FETCH PLAYERS ---
   const fetchPlayers = useCallback(async () => {
     setLoading(true);
     try {
@@ -433,14 +373,12 @@ useEffect(() => {
     }
   }, [fetchPlayers, dateRange, customStart, customEnd]);
 
-
+  // --- ACTIONS ---
   const applyCustomDates = () => {
     if (dateRange === 'custom' && customStart && customEnd) {
       fetchPlayers();
     }
   };
-
-  const toggleSection = (key: keyof typeof sections) => setSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   const handleGlobalReset = () => {
     setOpenGroup(null); setSelectedPositions([]); setSelectedStatKeys([]); setLevel("all"); setLeagueStatus("all");
@@ -517,6 +455,19 @@ useEffect(() => {
     else { setSortKey(key); setSortDir("desc"); }
   };
 
+  const toggleStat = (key: StatKey) => {
+    if (selectedStatKeys.includes(key)) {
+      setSelectedStatKeys(prev => prev.filter(k => k !== key));
+    } else { 
+      setSelectedStatKeys(prev => [...prev, key]); 
+      if (statThresholds[key] === undefined) {
+        const startValue = STATS[key].min ?? 0;
+        setStatThresholds(prev => ({ ...prev, [key]: startValue })); 
+      }
+    }
+  };
+
+  // --- FILTERED DATA MEMO ---
   const filteredPlayers = useMemo(() => {
     const scoredData = players.map((p: any) => enrichPlayerData(p, dateRange));
 
@@ -576,19 +527,81 @@ useEffect(() => {
     });
   }, [players, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange]);
 
-const toggleStat = (key: StatKey) => {
-    if (selectedStatKeys.includes(key)) {
-      setSelectedStatKeys(prev => prev.filter(k => k !== key));
-    } else { 
-      setSelectedStatKeys(prev => [...prev, key]); 
-      if (statThresholds[key] === undefined) {
-        const startValue = STATS[key].min ?? 0;
-        setStatThresholds(prev => ({ ...prev, [key]: startValue })); 
-      }
-    }
+
+  /* =============================================================================
+        RENDER FUNCTIONS (De-cluttering Main Return)
+   ============================================================================= */
+
+  const renderFilterTray = () => {
+    if (!openGroup) return null;
+    return (
+      <div style={{ background: "#fafafa", borderBottom: "1px solid #ddd", borderTop: `2px solid ${COLORS.DARK_GREEN}`, padding: "20px", boxShadow: "inset 0 4px 12px rgba(0,0,0,0.05)", animation: "slideDownTray 0.2s ease-out" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h4 style={{ margin: 0, fontSize: 12, fontWeight: 900, color: "#999", textTransform: "uppercase" }}>
+                Select Stats for {CATEGORY_DISPLAY[openGroup]?.label || openGroup}
+            </h4>
+            <button onClick={() => setOpenGroup(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#999", display: "flex", alignItems: "center", fontSize: "16px" }}>
+                <Icons.X />
+            </button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+            {CORE_STATS[openGroup]?.map((sk) => {
+                const config = STATS[sk]; if (!config) return null; 
+                const isSelected = selectedStatKeys.includes(sk);
+                const isDisabled = config.isPaid && !isUserPaid;
+                const minVal = config.min ?? 0;
+                const maxVal = config.max ?? 100;
+                const stepVal = config.step ?? 1;
+                const currentThreshold = statThresholds[sk] ?? minVal;
+
+                return (
+                    <div key={sk} style={{ 
+                        background: "#fff", borderRadius: 8, 
+                        border: `1px solid ${isSelected ? COLORS.DARK_GREEN : "#eee"}`,
+                        padding: 12, opacity: isDisabled ? 0.6 : 1,
+                        boxShadow: isSelected ? "0 4px 12px rgba(27, 94, 32, 0.15)" : "0 2px 4px rgba(0,0,0,0.02)",
+                        transition: "all 0.2s"
+                    }}>
+                        <div 
+                          onClick={() => !isDisabled && toggleStat(sk)} 
+                          style={{ 
+                            cursor: isDisabled ? "not-allowed" : "pointer", 
+                            display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 
+                          }}
+                        >
+                            <div>
+                                <div style={{ fontWeight: 800, fontSize: 13, color: isSelected ? COLORS.DARK_GREEN : "#333" }}>{config.label}</div>
+                                <div style={{ fontSize: 10, color: "#888", lineHeight: 1.2 }}>{config.description}</div>
+                            </div>
+                            <div className={`custom-checkbox ${isSelected ? 'checked' : ''}`} style={{ color: "white" }}>
+                                {isSelected && <Icons.Check />}
+                            </div>
+                        </div>
+
+                        {isSelected && (
+                            <div style={{ paddingTop: 8, borderTop: "1px solid #f0f0f0" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <button onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold - stepVal).toFixed(3)) })); }} style={{ ...STYLES.btnBase, padding: "2px 8px", minWidth: "24px" }}>−</button>
+                                    <input type="range" min={minVal} max={maxVal} step={stepVal} value={currentThreshold} onChange={(e) => setStatThresholds(p => ({ ...p, [sk]: Number(e.target.value) }))} style={{ flex: 1, accentColor: COLORS.DARK_GREEN, cursor: "pointer", height: 4 }} />
+                                    <button onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold + stepVal).toFixed(3)) })); }} style={{ ...STYLES.btnBase, padding: "2px 8px", minWidth: "24px" }}>+</button>
+                                </div>
+                                <div style={{ textAlign: "right", marginTop: "4px", fontWeight: 900, color: COLORS.DARK_GREEN, fontSize: "12px" }}>
+                                    {config.goodDirection === "higher" ? "Min: " : "Max: "}
+                                    {currentThreshold}
+                                    {config.unit === "percent" ? "%" : ""}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+      </div>
+    );
   };
 
-  const TeamScrollRow = () => {
+  const renderTeamScrollRow = () => {
     const isAllSelected = ALL_TEAMS.every(t => selectedTeams.includes(t));
     const toggleAll = () => {
         if (isAllSelected) setSelectedTeams([]);
@@ -598,7 +611,7 @@ const toggleStat = (key: StatKey) => {
     return (
         <div className="hide-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, alignItems: "center", width: "100%" }}>
             <div style={{ flexShrink: 0, fontSize: 10, fontWeight: 900, color: "#999", marginRight: 4 }}>TEAMS:</div>
-            <button onClick={toggleAll} style={{ flexShrink: 0, width: 28, height: 28, borderRadius: "50%", border: `2px solid ${isAllSelected ? BUTTON_DARK_GREEN : "#ddd"}`, fontSize: 9, fontWeight: 900, background: isAllSelected ? BUTTON_DARK_GREEN : "#fff", color: isAllSelected ? "#fff" : "#999", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>ALL</button>
+            <button onClick={toggleAll} style={{ flexShrink: 0, width: 28, height: 28, borderRadius: "50%", border: `2px solid ${isAllSelected ? COLORS.DARK_GREEN : "#ddd"}`, fontSize: 9, fontWeight: 900, background: isAllSelected ? COLORS.DARK_GREEN : "#fff", color: isAllSelected ? "#fff" : "#999", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>ALL</button>
             <div style={{ width: 1, height: 20, background: "#eee", flexShrink: 0, margin: "0 4px" }} />
             {ALL_TEAMS.map(t => {
                 const isSel = selectedTeams.includes(t);
@@ -631,6 +644,7 @@ const toggleStat = (key: StatKey) => {
     const standardStats = ["avg", "hr", "rbi", "sb", "ops"];
     const advStats = ["wrc_plus", "iso", "xwoba", "k_pct", "bb_pct"];
     const statcast = ["exit_velocity_avg", "barrel_pct", "hard_hit_pct", "sprint_speed"];
+    
     return (
       <div className="compare-modal-overlay" onClick={() => setIsCompareOpen(false)}>
         <div className="compare-modal-content" onClick={e => e.stopPropagation()}>
@@ -683,9 +697,10 @@ const toggleStat = (key: StatKey) => {
     );
   };
 
+  // --- MAIN RETURN ---
   return (
     <div style={{ minHeight: "100vh", background: `radial-gradient(circle at center, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.85) 100%), url('/bg-grass.png')`, backgroundAttachment: "fixed", backgroundSize: "cover", display: "flex", flexDirection: "column", width: "100%" }}>
-      <PulseStyles />
+      <GlobalStyles />
       <div className="beta-banner">BETA • v1.2 • Dec 2025</div>
       {renderCompareModal()}
       
@@ -710,12 +725,30 @@ const toggleStat = (key: StatKey) => {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {/* NEW NEWS BUTTON */}
+              <button 
+                onClick={() => setIsNewsOpen(true)}
+                title="News & Updates"
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#333'} 
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1a1a1a'} 
+                style={{ position: 'relative', width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: '#1a1a1a', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'background 0.2s' }}
+              >
+                 <Newspaper size={18} color="#888" />
+                 {/* Pulse Indicator */}
+                 <span style={{ position: 'absolute', top: 4, right: 4, width: 8, height: 8 }}>
+                    <span style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', background: '#4caf50', opacity: 0.75, animation: 'ping 1s cubic-bezier(0, 0, 0.2, 1) infinite' }} className="animate-ping" />
+                    <span style={{ position: 'relative', display: 'inline-block', width: '100%', height: '100%', borderRadius: '50%', background: '#4caf50' }} />
+                 </span>
+              </button>
+
               <button onClick={() => setIsSyncModalOpen(true)} title="Sync League" onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4caf50'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#333'} style={{ width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: '#333', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.3)', flexShrink: 0, transition: 'background 0.2s' }}>
                 <div style={{ transform: 'scale(0.8)' }}><Icons.Sync /></div>
               </button>
               <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}><TeamSwitcher /></div>
-              <button className="upgrade-btn" style={{ ...baseButtonStyle, background: isUserPaid ? 'rgba(255,255,255,0.1)' : '#4caf50', color: '#fff', border: isUserPaid ? '1px solid #333' : 'none', padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, flexShrink: 0, boxShadow: isUserPaid ? 'none' : '0 2px 8px rgba(76, 175, 80, 0.4)' }}>{isUserPaid ? '✔ PRO' : 'UPGRADE'}</button>
-              <UserMenu />
+              <button className="upgrade-btn" style={{ ...STYLES.btnBase, background: isUserPaid ? 'rgba(255,255,255,0.1)' : '#4caf50', color: '#fff', border: isUserPaid ? '1px solid #333' : 'none', padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, flexShrink: 0, boxShadow: isUserPaid ? 'none' : '0 2px 8px rgba(76, 175, 80, 0.4)' }}>{isUserPaid ? '✔ PRO' : 'UPGRADE'}</button>
+              <div className="desktop-player-info" style={{marginLeft: 8}}>
+                <UserMenu />
+              </div>
           </div>
         </div>
       </nav>
@@ -743,7 +776,7 @@ const toggleStat = (key: StatKey) => {
         {/* PRESET TABS */}
         <div style={{ marginBottom: 24, marginTop: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div style={{ ...labelStyle, color: "rgba(255,255,255,0.8)", display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 18 }}>⚡</span> Scouting Quick Presets</div>
+            <div style={{ ...STYLES.label, color: "rgba(255,255,255,0.8)", display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 18 }}>⚡</span> Scouting Quick Presets</div>
             <div style={{ display: "flex", gap: 8 }}>
               {(["recommended", "expert", "my_filters"] as const).map(t => (
                 <button key={t} onClick={() => setPresetTab(t)} style={{ padding: "4px 12px", borderRadius: 16, border: "none", background: presetTab === t ? "#4caf50" : "rgba(255,255,255,0.1)", color: presetTab === t ? "#fff" : "rgba(255,255,255,0.6)", fontWeight: 700, fontSize: 11, cursor: "pointer", textTransform: "capitalize" }}>{t.replace("_", " ")}</button>
@@ -754,17 +787,82 @@ const toggleStat = (key: StatKey) => {
           <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 10, WebkitOverflowScrolling: 'touch' }}>
             {presetTab === "recommended" && (
               <>
-                <div className="preset-card" onClick={() => applyQuickFilter({ name: "Young Speed Power", pos: BATTER_POSITIONS, stats: ["xwoba", "sprint_speed"], thresholds: { xwoba: 0.330, sprint_speed: 28.5 }, minTools: 2 })} style={{ ...compactCardStyle, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)" }}><div style={{ fontWeight: 900, color: BUTTON_DARK_GREEN, fontSize: 12 }}>Young Speed-Power</div><div style={{ fontSize: 10, color: "#666" }}>xwOBA &gt; .330 + Speed &gt; 28.5</div></div>
-                <div className="preset-card" onClick={() => applyQuickFilter({ name: "Strikeout Artisans", pos: PITCHER_POSITIONS, stats: ["k_pct", "bb_pct"], thresholds: { k_pct: 29, bb_pct: 6 }, minTools: 1 })} style={{ ...compactCardStyle, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)" }}><div style={{ fontWeight: 900, color: "#9c27b0", fontSize: 12 }}>The K-Artisans</div><div style={{ fontSize: 10, color: "#666" }}>K% &gt; 29% + BB &lt; 6%</div></div>
-                <div className="preset-card" onClick={() => applyQuickFilter({ name: "2026 OF Prospects", pos: ["OF"], stats: ["sprint_speed"], thresholds: { sprint_speed: 28.0 }, minTools: 1, level: "prospects" })} style={{ ...compactCardStyle, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)" }}><div style={{ fontWeight: 900, color: "#005A9C", fontSize: 12 }}>2026 OF Prospects</div><div style={{ fontSize: 10, color: "#666" }}>Speed &gt; 28.0 (MiLB)</div></div>
-                <div className="preset-card" onClick={() => applyQuickFilter({ name: "Prospect Triple Threat", pos: [], stats: [], thresholds: {}, minTools: 3, level: "prospects" })} style={{ ...compactCardStyle, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)" }}><div style={{ fontWeight: 900, color: "#d32f2f", fontSize: 12 }}>Triple Threat MiLB</div><div style={{ fontSize: 10, color: "#666" }}>3+ Elite Tools (Power/Speed)</div></div>
+                {/* 1. THE SLEEPING GIANT (Buy Low) - Red for Power */}
+                <div className="preset-card" onClick={() => applyQuickFilter({ 
+                    name: "The Sleeping Giant", 
+                    pos: BATTER_POSITIONS, 
+                    stats: ["barrel_pct", "chase_pct", "xwoba", "avg", "pa"], 
+                    thresholds: { barrel_pct: 10, chase_pct: 28 }, 
+                    minTools: 0,
+                    dateRange: "last_30"
+                })} style={{ ...STYLES.cardCompact, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)", borderTop: "3px solid #d32f2f" }}>
+                    <div style={{ fontWeight: 900, color: "#d32f2f", fontSize: 12 }}>The Sleeping Giant</div>
+                    <div style={{ fontSize: 10, color: "#666" }}>Elite Process, Bad Luck.</div>
+                    <div style={{ fontSize: 9, color: "#888", fontStyle: "italic" }}>Last 30 Days</div>
+                </div>
+
+                {/* 2. HIDDEN HIGH-FLOOR (Contact) - Blue */}
+                <div className="preset-card" onClick={() => applyQuickFilter({ 
+                    name: "Hidden High Floor", 
+                    pos: BATTER_POSITIONS, 
+                    stats: ["zone_contact_pct", "max_exit_velocity", "age", "k_pct"], 
+                    thresholds: { zone_contact_pct: 85, max_exit_velocity: 108, age: 24 }, 
+                    minTools: 1,
+                    dateRange: "season_curr"
+                })} style={{ ...STYLES.cardCompact, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)", borderTop: "3px solid #1976d2" }}>
+                    <div style={{ fontWeight: 900, color: "#1976d2", fontSize: 12 }}>Hidden High-Floor</div>
+                    <div style={{ fontSize: 10, color: "#666" }}>Young + Contact + Secret Pop.</div>
+                    <div style={{ fontSize: 9, color: "#888", fontStyle: "italic" }}>Full Season</div>
+                </div>
+
+                {/* 3. STUFF+ BREAKOUT (Pitching) - Purple */}
+                <div className="preset-card" onClick={() => applyQuickFilter({ 
+                    name: "Stuff+ Breakout", 
+                    pos: PITCHER_POSITIONS, 
+                    stats: ["ivb", "k_pct", "era", "xera"], 
+                    thresholds: { ivb: 17, k_pct: 25 }, 
+                    minTools: 1,
+                    dateRange: "last_30"
+                })} style={{ ...STYLES.cardCompact, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)", borderTop: "3px solid #7b1fa2" }}>
+                    <div style={{ fontWeight: 900, color: "#7b1fa2", fontSize: 12 }}>Stuff+ Breakout</div>
+                    <div style={{ fontSize: 10, color: "#666" }}>Elite Shape, Buy-Low ERA.</div>
+                    <div style={{ fontSize: 9, color: "#888", fontStyle: "italic" }}>Last 30 Days</div>
+                </div>
+
+                {/* 4. GREEN LIGHT SPEEDSTER (Speed) - Yellow */}
+                <div className="preset-card" onClick={() => applyQuickFilter({ 
+                    name: "Green Light Speed", 
+                    pos: BATTER_POSITIONS, 
+                    stats: ["sprint_speed", "sb", "bolts", "obp"], 
+                    thresholds: { sprint_speed: 29, bolts: 3 }, 
+                    minTools: 1,
+                    dateRange: "last_30"
+                })} style={{ ...STYLES.cardCompact, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)", borderTop: "3px solid #fbc02d" }}>
+                    <div style={{ fontWeight: 900, color: "#f57f17", fontSize: 12 }}>Green Light Speed</div>
+                    <div style={{ fontSize: 10, color: "#666" }}>Elite Wheels + New Aggression.</div>
+                    <div style={{ fontSize: 9, color: "#888", fontStyle: "italic" }}>Last 30 Days</div>
+                </div>
+
+                {/* 5. LAUNCH ANGLE FIX (Power) - Orange */}
+                <div className="preset-card" onClick={() => applyQuickFilter({ 
+                    name: "Launch Angle Fix", 
+                    pos: BATTER_POSITIONS, 
+                    stats: ["ev_90", "hard_hit_pct", "iso", "hr"], 
+                    thresholds: { ev_90: 103, hard_hit_pct: 45 }, 
+                    minTools: 0,
+                    dateRange: "last_30"
+                })} style={{ ...STYLES.cardCompact, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)", borderTop: "3px solid #e64a19" }}>
+                    <div style={{ fontWeight: 900, color: "#e64a19", fontSize: 12 }}>Launch Angle Fix</div>
+                    <div style={{ fontSize: 10, color: "#666" }}>Raw Power finding the air.</div>
+                    <div style={{ fontSize: 9, color: "#888", fontStyle: "italic" }}>Last 30 Days</div>
+                </div>
               </>
             )}
             {presetTab === "expert" && <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, padding: 10 }}>Expert Filters coming in next update...</div>}
             {presetTab === "my_filters" && (
               <>
                 {savedFilters.length === 0 ? <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, padding: 10 }}>No saved filters yet. Create one below!</div> : savedFilters.map((filter) => (
-                  <div key={filter.id} className="preset-card" onClick={() => applyQuickFilter(filter)} style={{ ...compactCardStyle, flex: "0 0 200px", cursor: "pointer", background: "#e8f5e9", borderColor: "#4caf50" }}>
+                  <div key={filter.id} className="preset-card" onClick={() => applyQuickFilter(filter)} style={{ ...STYLES.cardCompact, flex: "0 0 200px", cursor: "pointer", background: "#e8f5e9", borderColor: "#4caf50" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}><div style={{ fontWeight: 900, color: "#2e7d32", fontSize: 12 }}>{filter.name}</div><button onClick={(e) => deleteFilter(filter.id, e)} style={{ background: "none", border: "none", cursor: "pointer", opacity: 0.5 }}><Icons.Trash /></button></div>
                     <div style={{ fontSize: 10, color: "#555" }}>{filter.stats?.length || 0} Stats • {filter.dateRange || 'Season'}</div>
                   </div>
@@ -776,201 +874,62 @@ const toggleStat = (key: StatKey) => {
 
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
           
-          {/* NEW: Full width section */}
           <section style={{ flex: "1 1 600px", width: "100%" }}>
             
-            {/* IMPORTANT: overflow: visible allows the dropdowns to float outside the card */}
-            <div style={{ ...cardStyle, padding: 0, overflow: "visible" }}>
+            {/* --- FILTER CONTROL PANEL --- */}
+            <div style={{ borderWidth: "1px", borderStyle: "solid", borderColor: "rgba(255,255,255,0.1)", borderRadius: 16, background: "rgba(255,255,255,0.98)", padding: 0, overflow: "visible", boxShadow: "0 10px 40px rgba(0,0,0,0.4)", display: "flex", flexDirection: "column", width: "100%" }}>
               
               {/* --- 1. STAT CATEGORIES (Horizontal Scroll) --- */}
-              {(() => {
-                const CATEGORY_DISPLAY: Record<string, { label: string; icon: any }> = {
-                  "profile":          { label: "Context",    icon: CategoryIcons.Context },
-                  "std_hit":          { label: "Basic Bat",  icon: CategoryIcons.Bat },
-                  "power":            { label: "Power",      icon: CategoryIcons.Power },
-                  "discipline":       { label: "Discipline", icon: CategoryIcons.Eye },
-                  "contact":          { label: "Contact",    icon: CategoryIcons.Target },
-                  "speed":            { label: "Speed",      icon: CategoryIcons.Speed }, 
-                  "std_pitch":        { label: "Basic Arm",  icon: CategoryIcons.Ball },
-                  "pitch_shape":      { label: "Stuff",      icon: CategoryIcons.Stuff },
-                  "pitch_outcomes":   { label: "Outcomes",   icon: CategoryIcons.Check },
-                };
+              <div className="hide-scrollbar" style={{ padding: "16px 12px 0 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+                  {CORES.map((core) => {
+                  const isOpen = openGroup === core.id;
+                  const activeCount = CORE_STATS[core.id]?.filter(k => selectedStatKeys.includes(k)).length || 0;
+                  const display = CATEGORY_DISPLAY[core.id] || { label: core.label, icon: null };
 
-                return (
-                  <>
-                    <div className="hide-scrollbar" style={{ 
-                        padding: "16px 12px 0 12px", 
-                        display: "flex", 
-                        gap: 8, 
-                        overflowX: "auto", 
-                        whiteSpace: "nowrap", 
-                        flexWrap: "nowrap",
-                        borderBottom: openGroup ? "none" : "1px solid #e0e0e0", 
-                        background: "#f9f9f9", 
-                        borderTopLeftRadius: 16, 
-                        borderTopRightRadius: 16 
-                    }}>
-                        {CORES.map((core) => {
-                        const isOpen = openGroup === core.id;
-                        const activeCount = CORE_STATS[core.id]?.filter(k => selectedStatKeys.includes(k)).length || 0;
-                        const display = CATEGORY_DISPLAY[core.id] || { label: core.label, icon: null };
+                  const isActiveStyle = { background: COLORS.DARK_GREEN, color: "white", borderColor: COLORS.DARK_GREEN, boxShadow: "0 4px 12px rgba(27, 94, 32, 0.3)" };
+                  const hasFilterStyle = { background: "white", color: COLORS.DARK_GREEN, borderColor: COLORS.DARK_GREEN, borderWidth: "1px" };
+                  const defaultStyle = { background: "white", color: "#555", borderColor: "transparent", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" };
+                  let currentStyle = isOpen ? isActiveStyle : (activeCount > 0 ? hasFilterStyle : defaultStyle);
 
-                        // DYNAMIC STYLING
-                        const isActiveStyle = {
-                            background: BUTTON_DARK_GREEN, 
-                            color: "white", 
-                            borderColor: BUTTON_DARK_GREEN,
-                            boxShadow: "0 4px 12px rgba(27, 94, 32, 0.3)"
-                        };
+                  return (
+                      <div key={core.id} style={{ position: "relative", paddingBottom: 12, flexShrink: 0 }}>
+                      <button 
+                          onClick={() => setOpenGroup(isOpen ? null : core.id)}
+                          style={{
+                          ...STYLES.btnBase, ...currentStyle,
+                          padding: "8px 14px", borderRadius: "24px", fontSize: "12px", fontWeight: (isOpen || activeCount > 0) ? 800 : 600,
+                          display: "flex", alignItems: "center", gap: "6px",
+                          border: isOpen ? `1px solid ${COLORS.DARK_GREEN}` : (activeCount > 0 ? `1px solid ${COLORS.DARK_GREEN}` : "1px solid #eee"),
+                          zIndex: isOpen ? 1002 : 1
+                          }}
+                      >
+                          {display.icon && <span style={{ opacity: isOpen ? 1 : 0.7 }}>{display.icon}</span>}
+                          {display.label}
+                          {activeCount > 0 && (
+                              <span style={{ marginLeft: 4, fontSize: 9, background: isOpen ? "#fff" : COLORS.DARK_GREEN, color: isOpen ? COLORS.DARK_GREEN : "#fff", fontWeight: 900, width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%" }}>
+                                  {activeCount}
+                              </span>
+                          )}
+                          <span style={{ fontSize: 8, opacity: 0.5, marginLeft: 2 }}>{isOpen ? "▲" : "▼"}</span>
+                      </button>
+                      </div>
+                  );
+                  })}
+              </div>
 
-                        const hasFilterStyle = {
-                            background: "white", 
-                            color: BUTTON_DARK_GREEN, 
-                            borderColor: BUTTON_DARK_GREEN,
-                            borderWidth: "1px"
-                        };
-
-                        const defaultStyle = {
-                            background: "white", 
-                            color: "#555", 
-                            borderColor: "transparent",
-                            boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
-                        };
-
-                        let currentStyle = isOpen ? isActiveStyle : (activeCount > 0 ? hasFilterStyle : defaultStyle);
-
-                        return (
-                            <div key={core.id} style={{ position: "relative", paddingBottom: 12, flexShrink: 0 }}>
-                            <button 
-                                onClick={() => setOpenGroup(isOpen ? null : core.id)}
-                                style={{
-                                ...baseButtonStyle,
-                                ...currentStyle,
-                                padding: "8px 14px",
-                                borderRadius: "24px",
-                                fontSize: "12px",
-                                fontWeight: (isOpen || activeCount > 0) ? 800 : 600,
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "6px",
-                                transition: "all 0.2s ease",
-                                border: isOpen ? `1px solid ${BUTTON_DARK_GREEN}` : (activeCount > 0 ? `1px solid ${BUTTON_DARK_GREEN}` : "1px solid #eee"),
-                                zIndex: isOpen ? 1002 : 1
-                                }}
-                            >
-                                {display.icon && <span style={{ opacity: isOpen ? 1 : 0.7 }}>{display.icon}</span>}
-                                {display.label}
-                                {activeCount > 0 && (
-                                    <span style={{ 
-                                    marginLeft: 4, 
-                                    fontSize: 9, 
-                                    background: isOpen ? "#fff" : BUTTON_DARK_GREEN, 
-                                    color: isOpen ? BUTTON_DARK_GREEN : "#fff", 
-                                    fontWeight: 900,
-                                    width: 18,
-                                    height: 18,
-                                    display: "flex", 
-                                    alignItems: "center", 
-                                    justifyContent: "center",
-                                    borderRadius: "50%" 
-                                    }}>
-                                    {activeCount}
-                                    </span>
-                                )}
-                                <span style={{ fontSize: 8, opacity: 0.5, marginLeft: 2 }}>{isOpen ? "▲" : "▼"}</span>
-                            </button>
-                            </div>
-                        );
-                        })}
-                    </div>
-
-                    {/* --- THE FILTER TRAY (Fixes Overflow Clipping) --- */}
-                    {openGroup && (
-                        <div style={{ 
-                            background: "#fafafa", 
-                            borderBottom: "1px solid #ddd", 
-                            borderTop: `2px solid ${BUTTON_DARK_GREEN}`, 
-                            padding: "20px", 
-                            boxShadow: "inset 0 4px 12px rgba(0,0,0,0.05)",
-                            animation: "slideDownTray 0.2s ease-out"
-                        }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                                <h4 style={{ margin: 0, fontSize: 12, fontWeight: 900, color: "#999", textTransform: "uppercase" }}>
-                                    Select Stats for {CATEGORY_DISPLAY[openGroup]?.label || openGroup}
-                                </h4>
-                                <button onClick={() => setOpenGroup(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#999" }}><Icons.X size={16} /></button>
-                            </div>
-
-                            <div style={{ 
-                                display: "grid", 
-                                gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", 
-                                gap: 12 
-                            }}>
-                                {CORE_STATS[openGroup]?.map((sk) => {
-                                    const config = STATS[sk]; if (!config) return null; 
-                                    const isSelected = selectedStatKeys.includes(sk);
-                                    const isDisabled = config.isPaid && !isUserPaid;
-                                    const minVal = config.min ?? 0;
-                                    const maxVal = config.max ?? 100;
-                                    const stepVal = config.step ?? 1;
-                                    const currentThreshold = statThresholds[sk] ?? minVal;
-
-                                    return (
-                                        <div key={sk} style={{ 
-                                            background: "#fff", 
-                                            borderRadius: 8, 
-                                            border: `1px solid ${isSelected ? BUTTON_DARK_GREEN : "#eee"}`,
-                                            padding: 12,
-                                            opacity: isDisabled ? 0.6 : 1,
-                                            boxShadow: isSelected ? "0 4px 12px rgba(27, 94, 32, 0.15)" : "0 2px 4px rgba(0,0,0,0.02)",
-                                            transition: "all 0.2s"
-                                        }}>
-                                            <div onClick={() => !isDisabled && toggleStat(sk)} style={{ cursor: isDisabled ? "not-allowed" : "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                                                <div>
-                                                    <div style={{ fontWeight: 800, fontSize: 13, color: isSelected ? BUTTON_DARK_GREEN : "#333" }}>{config.label}</div>
-                                                    <div style={{ fontSize: 10, color: "#888", lineHeight: 1.2 }}>{config.description}</div>
-                                                </div>
-                                                <div className={`custom-checkbox ${isSelected ? 'checked' : ''}`}>
-                                                    {isSelected && <Icons.Check style={{ stroke: "white" }} />}
-                                                </div>
-                                            </div>
-
-                                            {isSelected && (
-                                                <div style={{ paddingTop: 8, borderTop: "1px solid #f0f0f0" }}>
-                                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                                        <button onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold - stepVal).toFixed(3)) })); }} style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "24px" }}>−</button>
-                                                        <input type="range" min={minVal} max={maxVal} step={stepVal} value={currentThreshold} onChange={(e) => setStatThresholds(p => ({ ...p, [sk]: Number(e.target.value) }))} style={{ flex: 1, accentColor: BUTTON_DARK_GREEN, cursor: "pointer", height: 4 }} />
-                                                        <button onClick={(e) => { e.stopPropagation(); setStatThresholds(p => ({ ...p, [sk]: Number((currentThreshold + stepVal).toFixed(3)) })); }} style={{ ...baseButtonStyle, padding: "2px 8px", minWidth: "24px" }}>+</button>
-                                                    </div>
-                                                    <div style={{ textAlign: "right", marginTop: "4px", fontWeight: 900, color: BUTTON_DARK_GREEN, fontSize: "12px" }}>
-                                                        {config.goodDirection === "higher" ? "Min: " : "Max: "}
-                                                        {currentThreshold}
-                                                        {config.unit === "percent" ? "%" : ""}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-                  </>
-                );
-              })()}
+              {/* --- 1.5 THE FILTER TRAY --- */}
+              {renderFilterTray()}
 
               {/* --- 2. COMPACT SUPER ROW (Split into 2 Rows) --- */}
               <div style={{ background: "#fff", borderBottom: "1px solid #eee" }}>
                   
-                  {/* ROW 1: SCOPE (FA/My Team) & LEVELS (All, MLB, Rookies) */}
+                  {/* ROW 1: SCOPE & LEVELS */}
                   <div className="hide-scrollbar" style={{ display: "flex", gap: 10, padding: "12px 20px 6px 20px", overflowX: "auto", alignItems: "center" }}>
-                      
-                      {/* A. SCOPE */}
                       <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                           {[
                             { key: "all", label: "All" },
                             { key: "available", label: "FA" },    
-                            { key: "my_team", label: "My Team" },                    
+                            { key: "my_team", label: "My Team" },                      
                             { key: "rostered", label: "Rostered" }       
                           ].map((opt) => { 
                             const isLocked = !isUserPaid && opt.key !== "all"; 
@@ -978,56 +937,46 @@ const toggleStat = (key: StatKey) => {
                               <button 
                                 key={opt.key} 
                                 onClick={() => !isLocked && setLeagueStatus(opt.key as LeagueStatus)} 
-                                style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(leagueStatus === opt.key ? selectedButtonStyle : null), opacity: isLocked ? 0.6 : 1, cursor: isLocked ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}
+                                style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(leagueStatus === opt.key ? STYLES.btnSelected : null), opacity: isLocked ? 0.6 : 1, cursor: isLocked ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}
                               >
                                 {opt.label}{isLocked && <Icons.LockSmall />}
                               </button>
                             ); 
                           })}
                       </div>
-
                       <div style={{ width: 1, height: 20, background: "#eee", flexShrink: 0 }} />
-
-                      {/* B. LEVELS */}
                       <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                          <button onClick={() => { setLevel("all"); setSelectedPositions([]); }} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "all" && selectedPositions.length === 0 ? selectedButtonStyle : null) }}>All</button>
-                          <button onClick={() => setLevel("mlb")} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "mlb" ? selectedButtonStyle : null) }}>MLB</button>
-                          <button onClick={() => setLevel("rookies" as any)} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "rookies" as any ? selectedButtonStyle : null) }}>Rookies</button>
-                          <button onClick={() => setLevel("prospects")} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(level === "prospects" ? selectedButtonStyle : null) }}>MiLB</button>
+                          <button onClick={() => { setLevel("all"); setSelectedPositions([]); }} style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(level === "all" && selectedPositions.length === 0 ? STYLES.btnSelected : null) }}>All</button>
+                          <button onClick={() => setLevel("mlb")} style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(level === "mlb" ? STYLES.btnSelected : null) }}>MLB</button>
+                          <button onClick={() => setLevel("rookies" as any)} style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(level === "rookies" as any ? STYLES.btnSelected : null) }}>Rookies</button>
+                          <button onClick={() => setLevel("prospects")} style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(level === "prospects" ? STYLES.btnSelected : null) }}>MiLB</button>
                       </div>
-
                   </div>
 
                   {/* ROW 2: TYPES & POSITIONS */}
                   <div className="hide-scrollbar" style={{ display: "flex", gap: 10, padding: "0 20px 12px 20px", overflowX: "auto", alignItems: "center" }}>
-                      
-                      {/* C. TYPES (Added 'All' button here) */}
                       <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                           <button 
                             onClick={() => setSelectedPositions([])} 
-                            style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(selectedPositions.length === 0 ? selectedButtonStyle : null) }}
+                            style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(selectedPositions.length === 0 ? STYLES.btnSelected : null) }}
                           >
                             All
                           </button>
-                          <button onClick={() => setSelectedPositions([...BATTER_POSITIONS])} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(BATTER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Batters</button>
-                          <button onClick={() => setSelectedPositions([...PITCHER_POSITIONS])} style={{ ...baseButtonStyle, padding: "6px 10px", fontSize: 11, ...(PITCHER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? selectedButtonStyle : null) }}>Pitchers</button>
+                          <button onClick={() => setSelectedPositions([...BATTER_POSITIONS])} style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(BATTER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? STYLES.btnSelected : null) }}>Batters</button>
+                          <button onClick={() => setSelectedPositions([...PITCHER_POSITIONS])} style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(PITCHER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? STYLES.btnSelected : null) }}>Pitchers</button>
                       </div>
-
                       <div style={{ width: 1, height: 20, background: "#eee", flexShrink: 0 }} />
-
-                      {/* D. POSITIONS */}
                       <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                           {ALL_POSITIONS.map(p => (
-                            <button key={p} onClick={() => setSelectedPositions(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])} style={{ ...baseButtonStyle, width: 28, height: 28, padding: 0, borderRadius: "50%", fontSize: 10, ...(selectedPositions.includes(p) ? selectedButtonStyle : null), flexShrink: 0 }}>{p}</button>
+                            <button key={p} onClick={() => setSelectedPositions(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])} style={{ ...STYLES.btnBase, width: 28, height: 28, padding: 0, borderRadius: "50%", fontSize: 10, ...(selectedPositions.includes(p) ? STYLES.btnSelected : null), flexShrink: 0 }}>{p}</button>
                           ))}
                       </div>
-
                   </div>
               </div>
 
               {/* --- 3. TEAMS ROW (Alphabetical) --- */}
               <div style={{ padding: "8px 20px", background: "#fff", borderBottom: "1px solid #eee" }}>
-                 <TeamScrollRow />
+                 {renderTeamScrollRow()}
               </div>
 
               {/* --- RESULTS BAR --- */}
@@ -1035,21 +984,20 @@ const toggleStat = (key: StatKey) => {
                 
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <span style={{ fontWeight: 900, fontSize: 18 }}>Results</span>
-                  {loading ? <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#666" }}><Icons.Spinner /> Scouting...</span> : <span style={{ fontSize: 11, fontWeight: 800, color: BUTTON_DARK_GREEN, background: "#e8f5e9", padding: "4px 10px", borderRadius: 20 }}>{filteredPlayers.length} Found</span>}
+                  {loading ? <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#666" }}><Icons.Spinner /> Scouting...</span> : <span style={{ fontSize: 11, fontWeight: 800, color: COLORS.DARK_GREEN, background: "#e8f5e9", padding: "4px 10px", borderRadius: 20 }}>{filteredPlayers.length} Found</span>}
                   
-                  <button onClick={handleGlobalReset} style={{...baseButtonStyle, fontSize: 10, padding: "4px 10px", background: "#fdecea", color: "#721c24", borderColor: "#f5c6cb"}}>Reset</button>
-                  <button onClick={saveCurrentFilter} title="Save current filter" style={{...baseButtonStyle, fontSize: 10, padding: "4px 10px", background: "#e3f2fd", color: "#0d47a1", borderColor: "#90caf9", display: "flex", alignItems: "center", gap: 4}}><Icons.Save /> Save</button>
+                  <button onClick={handleGlobalReset} style={{...STYLES.btnBase, fontSize: 10, padding: "4px 10px", background: "#fdecea", color: "#721c24", borderColor: "#f5c6cb"}}>Reset</button>
+                  <button onClick={saveCurrentFilter} title="Save current filter" style={{...STYLES.btnBase, fontSize: 10, padding: "4px 10px", background: "#e3f2fd", color: "#0d47a1", borderColor: "#90caf9", display: "flex", alignItems: "center", gap: 4}}><Icons.Save /> Save</button>
 
                   {compareList.length > 0 && (
                     <button onClick={() => setIsCompareOpen(true)} style={{ background: "#1b5e20", color: "#fff", border: "none", borderRadius: 20, padding: "6px 14px", fontWeight: 800, fontSize: 11, display: "flex", alignItems: "center", gap: 4, cursor: "pointer", animation: "slideDown 0.2s" }}>COMPARE ({compareList.length})</button>
                   )}
                 </div>
 
-                {/* ✅ UPDATED: Date & Search in a container that stays side-by-side on mobile */}
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: "auto", overflowX: "auto", flexWrap: "nowrap" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", padding: "4px 8px", borderRadius: "8px", border: "1px solid #eee", whiteSpace: "nowrap", flexShrink: 0 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: "#999", textTransform: "uppercase", marginRight: 2 }}>📅 Range:</span>
-                    <select value={dateRange} onChange={(e) => setDateRange(e.target.value as DateRangeOption)} style={{ ...baseButtonStyle, padding: "4px 8px", fontSize: 11, height: "28px", borderRadius: "6px" }}>
+                    <select value={dateRange} onChange={(e) => setDateRange(e.target.value as DateRangeOption)} style={{ ...STYLES.btnBase, padding: "4px 8px", fontSize: 11, height: "28px", borderRadius: "6px" }}>
                       <option value="season_curr">Current Season</option>
                       <option value="pace_season">Projected Full Season</option>
                       <option value="season_last">Last Season</option>
@@ -1061,11 +1009,11 @@ const toggleStat = (key: StatKey) => {
                     {dateRange === "custom" && (
                       <>
                         <div style={{ display: "flex", alignItems: "center", gap: 4, animation: "fadeIn 0.2s" }}>
-                          <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} style={{ ...baseButtonStyle, padding: "3px 6px", fontSize: 11, width: "110px" }} />
+                          <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} style={{ ...STYLES.btnBase, padding: "3px 6px", fontSize: 11, width: "110px" }} />
                           <span style={{ color: "#aaa", fontSize: 10 }}>to</span>
-                          <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} style={{ ...baseButtonStyle, padding: "3px 6px", fontSize: 11, width: "110px" }} />
+                          <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} style={{ ...STYLES.btnBase, padding: "3px 6px", fontSize: 11, width: "110px" }} />
                         </div>
-                        <button onClick={applyCustomDates} style={{ ...baseButtonStyle, background: BUTTON_DARK_GREEN, color: "#fff", border: "none", fontSize: 10, padding: "4px 8px", height: 26, fontWeight: 700 }}>Apply</button>
+                        <button onClick={applyCustomDates} style={{ ...STYLES.btnBase, background: COLORS.DARK_GREEN, color: "#fff", border: "none", fontSize: 10, padding: "4px 8px", height: 26, fontWeight: 700 }}>Apply</button>
                       </>
                     )}
                   </div>
@@ -1076,16 +1024,16 @@ const toggleStat = (key: StatKey) => {
               {/* LEGEND */}
               <ToolLegend />
 
+              {/* --- TABLE --- */}
               <div className="sticky-container">
                 <table className="sticky-table" style={{ fontSize: 13 }}>
                   <thead>
                     <tr>
-                      {/* --- NO MORE CHECKBOX COLUMN HERE --- */}
                       <th onClick={() => handleSort('name')} style={{ padding: "8px 12px", textAlign: "left", cursor: "pointer" }}>Player {sortKey === 'name' && (sortDir === 'asc' ? <Icons.SortAsc /> : <Icons.SortDesc />)}</th>
                       {selectedStatKeys.map(k => {
                         const showLock = dateRange !== 'season_curr' && dateRange !== 'pace_season' && isSeasonLocked(k);
                         return (
-                          <th key={k} onClick={() => handleSort(k)} style={{ padding: "8px 12px", textAlign: "right", color: BUTTON_DARK_GREEN, cursor: "pointer" }}>
+                          <th key={k} onClick={() => handleSort(k)} style={{ padding: "8px 12px", textAlign: "right", color: COLORS.DARK_GREEN, cursor: "pointer" }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
                               {showLock && (
                                 <span title="This stat is anchored to the Full Season (Talent Metric)" style={{ fontSize: 9, fontWeight: 900, color: '#999', border: '1px solid #ccc', borderRadius: '50%', width: '14px', height: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'help' }}>S</span>
@@ -1095,25 +1043,10 @@ const toggleStat = (key: StatKey) => {
                           </th>
                         );
                       })}
-                    {/* 1. DYNASTY */}
-<th onClick={() => handleSort('dynaScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_DYNASTY_PURPLE }}>
-  Dyna
-</th>
-
-{/* 2. ROTO */}
-<th onClick={() => handleSort('rotoScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: BUTTON_DARK_GREEN }}>
-  Roto
-</th>
-
-{/* 3. POINTS */}
-<th onClick={() => handleSort('pointsScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: "#0288d1" }}>
-  Points
-</th> 
-
-{/* 4. OVERALL (Formerly Range) */}
-<th onClick={() => handleSort('rangeScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: "#d84315" }}>
-  Overall
-</th>
+                      <th onClick={() => handleSort('dynaScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: COLORS.DYNASTY_PURPLE }}>Dyna</th>
+                      <th onClick={() => handleSort('rotoScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: COLORS.DARK_GREEN }}>Roto</th>
+                      <th onClick={() => handleSort('pointsScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: "#0288d1" }}>Points</th> 
+                      <th onClick={() => handleSort('rangeScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: COLORS.RANGE_ORANGE }}>Overall</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1132,12 +1065,8 @@ const toggleStat = (key: StatKey) => {
                           style={{ cursor: 'pointer', borderBottom: '1px solid #eee', transition: 'background 0.2s' }} 
                           className="hover:bg-gray-50"
                         >
-                          {/* --- NO MORE CHECKBOX TD HERE --- */}
-
-                          {/* COL 1: PLAYER IDENTITY (Adaptive Layout) */}
                           <td style={{ padding: "8px 12px" }}>
-                            
-                            {/* MOBILE LAYOUT: Stacked & Avatar is Clickable for Compare */}
+                            {/* MOBILE LAYOUT */}
                             <div className="mobile-player-info" style={{ display: "none" }}>
                                 <div onClick={(e) => { e.stopPropagation(); toggleCompare(p.id.toString()); }}>
                                     <PlayerAvatar team={p.team as TeamAbbr} jerseyNumber={p.jerseyNumber} hasNews={isExpanded} availability={p.availability} isSelected={isChecked} />
@@ -1147,14 +1076,11 @@ const toggleStat = (key: StatKey) => {
                                    <div style={{ fontSize: 9, color: "#888" }}>{p.position} - {p.team}</div>
                                 </div>
                             </div>
-
-                            {/* DESKTOP LAYOUT: Standard horizontal - NOW CLICKABLE AVATAR */}
+                            {/* DESKTOP LAYOUT */}
                             <div className="desktop-player-info" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              {/* AVATAR CLICK = COMPARE */}
                               <div onClick={(e) => { e.stopPropagation(); toggleCompare(p.id.toString()); }} style={{ cursor: 'pointer' }} title="Click to Compare">
                                  <PlayerAvatar team={p.team as TeamAbbr} jerseyNumber={p.jerseyNumber} hasNews={isExpanded} availability={p.availability} isSelected={isChecked} />
                               </div>
-                              
                               <div>
                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                   <span style={{ fontWeight: 700, fontSize: 14 }}>{p.name}</span>
@@ -1180,48 +1106,48 @@ const toggleStat = (key: StatKey) => {
                             </div>
                           </td>
                           {selectedStatKeys.map(k => {
-                      const isBatterStat = BATTER_STATS.includes(k);
-                      const isPitcherStat = PITCHER_STATS.includes(k);
-                      
-                      if ((isPitcher && isBatterStat) || (!isPitcher && isPitcherStat)) {
-                        return <td key={k} style={{ textAlign: "center", padding: "12px 10px", color: "#ccc" }}>-</td>;
-                      }
+                              const isBatterStat = BATTER_STATS.includes(k);
+                              const isPitcherStat = PITCHER_STATS.includes(k);
+                              
+                              if ((isPitcher && isBatterStat) || (!isPitcher && isPitcherStat)) {
+                                return <td key={k} style={{ textAlign: "center", padding: "12px 10px", color: "#ccc" }}>-</td>;
+                              }
 
-                      const rawVal = p.stats?.[k];
-                      if (rawVal === undefined || rawVal === null) {
-                          return <td key={k} style={{ textAlign: "right", padding: "8px 12px", color: "#ccc" }}>-</td>;
-                      }
+                              const rawVal = p.stats?.[k];
+                              if (rawVal === undefined || rawVal === null) {
+                                  return <td key={k} style={{ textAlign: "right", padding: "8px 12px", color: "#ccc" }}>-</td>;
+                              }
 
-                      const config = STATS[k];
-                      let displayVal = rawVal;
+                              const config = STATS[k];
+                              let displayVal = rawVal;
 
-                      if (config) {
-                          const num = parseFloat(rawVal);
-                          if (!isNaN(num)) {
-                              if (config.unit === 'percent') {
-                                  displayVal = `${num.toFixed(1)}%`;
-                              } else if (['avg', 'obp', 'slg', 'xba', 'xwoba', 'woba'].includes(k)) {
-                                  displayVal = num.toFixed(3).replace(/^0+/, ''); 
-                              } else if (['era', 'whip', 'k_bb_ratio', 'xera', 'fip'].includes(k)) {
-                                  displayVal = num.toFixed(2);
-                              } else if (['ip'].includes(k)) {
-                                  displayVal = num.toFixed(1);
-                              } else {
-                                  if (Number.isInteger(num)) {
-                                     displayVal = num.toString();
-                                  } else {
-                                     displayVal = num.toFixed(1);
+                              if (config) {
+                                  const num = parseFloat(rawVal);
+                                  if (!isNaN(num)) {
+                                      if (config.unit === 'percent') {
+                                          displayVal = `${num.toFixed(1)}%`;
+                                      } else if (['avg', 'obp', 'slg', 'xba', 'xwoba', 'woba'].includes(k)) {
+                                          displayVal = num.toFixed(3).replace(/^0+/, ''); 
+                                      } else if (['era', 'whip', 'k_bb_ratio', 'xera', 'fip'].includes(k)) {
+                                          displayVal = num.toFixed(2);
+                                      } else if (['ip'].includes(k)) {
+                                          displayVal = num.toFixed(1);
+                                      } else {
+                                          if (Number.isInteger(num)) {
+                                             displayVal = num.toString();
+                                          } else {
+                                             displayVal = num.toFixed(1);
+                                          }
+                                      }
                                   }
                               }
-                          }
-                      }
 
-                      return <td key={k} style={{ textAlign: "right", padding: "8px 12px", fontWeight: 700, fontFamily: "ui-monospace, monospace" }}>{displayVal}</td>
-                    })}
-                            <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: BUTTON_DYNASTY_PURPLE }}>{p.dynaScore}</td>
-                            <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: BUTTON_DARK_GREEN }}>{p.rotoScore}</td>
+                              return <td key={k} style={{ textAlign: "right", padding: "8px 12px", fontWeight: 700, fontFamily: "ui-monospace, monospace" }}>{displayVal}</td>
+                          })}
+                            <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: COLORS.DYNASTY_PURPLE }}>{p.dynaScore}</td>
+                            <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: COLORS.DARK_GREEN }}>{p.rotoScore}</td>
                             <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: "#0288d1" }}>{p.pointsScore}</td> 
-                            <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: BUTTON_RANGE_ORANGE }}>{p.rangeScore}</td>
+                            <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: COLORS.RANGE_ORANGE }}>{p.rangeScore}</td>
                           </tr>
 
                           {/* EXPANDABLE NEWS THREAD SECTION */}
@@ -1266,6 +1192,12 @@ const toggleStat = (key: StatKey) => {
           onClose={() => setIsSyncModalOpen(false)} 
         />
       )}
+
+      {/* --- NEWS DRAWER --- */}
+      <NewsDrawer 
+        isOpen={isNewsOpen} 
+        onClose={() => setIsNewsOpen(false)} 
+      />
     </div>
   )
 }
