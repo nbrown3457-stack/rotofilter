@@ -46,11 +46,10 @@ const BATTER_POSITIONS: Position[] = ["C", "1B", "2B", "3B", "SS", "OF", "DH"];
 const PITCHER_POSITIONS: Position[] = ["SP", "RP"];
 const ALL_POSITIONS: Position[] = [...BATTER_POSITIONS, ...PITCHER_POSITIONS];
 
-// NEW: Define the specific order for the category tabs
 const CUSTOM_TAB_ORDER = [
-  "profile",        // Was Context
-  "std_hit",        // Was Basic Bat -> Roto Batting
-  "std_pitch",      // Was Basic Arm -> Roto Pitching
+  "profile",        
+  "std_hit",        
+  "std_pitch",      
   "power", 
   "speed", 
   "discipline", 
@@ -115,7 +114,7 @@ const STYLES = {
   label: { fontWeight: 800, fontSize: 10, color: COLORS.GRAY_TEXT, textTransform: "uppercase", letterSpacing: "0.8px" } as React.CSSProperties
 };
 
-/* --- ICONS (UPDATED WITH COLORS) --- */
+/* --- ICONS --- */
 const CategoryIcons = {
   Context: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2196f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>,
   Bat: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l12 12 3-3-12-12z" /></svg>,
@@ -129,13 +128,13 @@ const CategoryIcons = {
 };
 
 const CATEGORY_DISPLAY: Record<string, { label: string; icon: any }> = {
-  "profile":          { label: "Profile",    icon: CategoryIcons.Context }, // Renamed from Context
-  "std_hit":          { label: "Roto Batting",  icon: CategoryIcons.Bat }, // Renamed from Basic Bat
+  "profile":          { label: "Profile",    icon: CategoryIcons.Context },
+  "std_hit":          { label: "Roto Batting",  icon: CategoryIcons.Bat }, 
   "power":            { label: "Power",      icon: CategoryIcons.Power },
   "discipline":       { label: "Discipline", icon: CategoryIcons.Eye },
   "contact":          { label: "Contact",    icon: CategoryIcons.Target },
   "speed":            { label: "Speed",      icon: CategoryIcons.Speed }, 
-  "std_pitch":        { label: "Roto Pitching",  icon: CategoryIcons.Ball }, // Renamed from Basic Arm
+  "std_pitch":        { label: "Roto Pitching",  icon: CategoryIcons.Ball }, 
   "pitch_shape":      { label: "Stuff",      icon: CategoryIcons.Stuff },
   "pitch_outcomes":   { label: "Outcomes",   icon: CategoryIcons.Check },
 };
@@ -150,7 +149,6 @@ const GlobalStyles = () => (
     .sticky-container { overflow: auto; max-height: 800px; position: relative; }
     .sticky-table { border-collapse: separate; border-spacing: 0; width: 100%; }
     .sticky-table thead th { position: sticky; top: 0; z-index: 20; background: #fafafa; box-shadow: inset 0 -1px 0 #eee; cursor: pointer; user-select: none; }
-    /* FIXED: Explicitly set top:0 for the corner header to handle vertical scrolling properly */
     .sticky-table td:nth-child(1), .sticky-table th:nth-child(1) { position: sticky; left: 0; z-index: 30; background: white; }
     .sticky-table th:nth-child(1) { z-index: 40; background: #fafafa; top: 0; } 
     .sticky-table td:nth-child(1)::after, .sticky-table th:nth-child(1)::after { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: #eee; }
@@ -280,7 +278,7 @@ export default function Home() {
   const [leagueScope, setLeagueScope] = useState('all'); 
   const [search, setSearch] = useState(''); 
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
-  const [isNewsOpen, setIsNewsOpen] = useState(false); // <--- NEW STATE FOR DRAWER
+  const [isNewsOpen, setIsNewsOpen] = useState(false); 
     
   const resultsTableRef = useRef<HTMLDivElement>(null);
 
@@ -543,7 +541,7 @@ export default function Home() {
 
 
   /* =============================================================================
-       RENDER FUNCTIONS (De-cluttering Main Return)
+       RENDER FUNCTIONS
    ============================================================================= */
 
   const renderFilterTray = () => {
@@ -560,7 +558,7 @@ export default function Home() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
-            {CORE_STATS[openGroup]?.map((sk) => {
+            {CUSTOM_TAB_ORDER.includes(openGroup) && CORE_STATS[openGroup]?.map((sk) => {
                 const config = STATS[sk]; if (!config) return null; 
                 const isSelected = selectedStatKeys.includes(sk);
                 const isDisabled = config.isPaid && !isUserPaid;
@@ -727,7 +725,25 @@ export default function Home() {
               <img src="/rf-logo.svg" alt="RF" style={{ width: '32px', height: '32px', marginRight: '1px', display: 'inline-block', verticalAlign: 'middle' }} />
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span className="nav-logo-text" style={{ fontWeight: 900, fontSize: '20px', color: '#fff', letterSpacing: '-0.5px', lineHeight: '1' }}>ROTO<span style={{ color: '#4caf50' }}>FILTER</span></span>
-                <span className="nav-logo-subtext" style={{ fontSize: '10px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', lineHeight: '1' }}>Data Driving Dominance</span>
+                
+                {/* --- CHANGED: CONDITIONAL TEAM NAME DISPLAY --- */}
+                {user && activeTeam ? (
+                  <span style={{ 
+                    color: '#FFD700', // Lightning Yellow
+                    fontFamily: 'fantasy, Impact, sans-serif', 
+                    fontSize: '12px', 
+                    marginTop: '2px', 
+                    letterSpacing: '1px', 
+                    lineHeight: '1',
+                    textShadow: '0 0 5px rgba(255, 215, 0, 0.4)'
+                  }}>
+                    {activeTeam.name || "My Team"}
+                  </span>
+                ) : (
+                  <span className="nav-logo-subtext" style={{ fontSize: '10px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', lineHeight: '1' }}>Data Driving Dominance</span>
+                )}
+                {/* --------------------------------------------- */}
+
               </div>
             </div>
             <div className="desktop-nav-links" style={{ display: 'flex', gap: '6px', alignItems: 'center', marginLeft: '10px' }}>
@@ -739,7 +755,6 @@ export default function Home() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* NEW NEWS BUTTON */}
               <button 
                 onClick={() => setIsNewsOpen(true)}
                 title="News & Updates"
@@ -748,7 +763,6 @@ export default function Home() {
                 style={{ position: 'relative', width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: '#1a1a1a', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'background 0.2s' }}
               >
                  <Newspaper size={18} color="#888" />
-                 {/* Pulse Indicator */}
                  <span style={{ position: 'absolute', top: 4, right: 4, width: 8, height: 8 }}>
                     <span style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', background: '#4caf50', opacity: 0.75, animation: 'ping 1s cubic-bezier(0, 0, 0.2, 1) infinite' }} className="animate-ping" />
                     <span style={{ position: 'relative', display: 'inline-block', width: '100%', height: '100%', borderRadius: '50%', background: '#4caf50' }} />
@@ -760,9 +774,28 @@ export default function Home() {
               </button>
               <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}><TeamSwitcher /></div>
               <button className="upgrade-btn" style={{ ...STYLES.btnBase, background: isUserPaid ? 'rgba(255,255,255,0.1)' : '#4caf50', color: '#fff', border: isUserPaid ? '1px solid #333' : 'none', padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, flexShrink: 0, boxShadow: isUserPaid ? 'none' : '0 2px 8px rgba(76, 175, 80, 0.4)' }}>{isUserPaid ? '✔ PRO' : 'UPGRADE'}</button>
-              <div className="desktop-player-info" style={{marginLeft: 8}}>
-                <UserMenu />
-              </div>
+              
+              {/* --- CHANGED: EXPLICIT SIGN IN BUTTON LOGIC --- */}
+              {!user ? (
+                <button 
+                  onClick={() => window.location.href = '/login'} 
+                  style={{ 
+                    ...STYLES.btnBase, 
+                    background: '#333', 
+                    color: '#fff', 
+                    marginLeft: 8,
+                    border: '1px solid #555' 
+                  }}
+                >
+                  Sign In
+                </button>
+              ) : (
+                <div className="desktop-player-info" style={{marginLeft: 8}}>
+                  <UserMenu />
+                </div>
+              )}
+              {/* ----------------------------------------------- */}
+
           </div>
         </div>
       </nav>
@@ -894,7 +927,6 @@ export default function Home() {
             <div style={{ borderWidth: "1px", borderStyle: "solid", borderColor: "rgba(255,255,255,0.1)", borderRadius: 16, background: "rgba(255,255,255,0.98)", padding: 0, overflow: "visible", boxShadow: "0 10px 40px rgba(0,0,0,0.4)", display: "flex", flexDirection: "column", width: "100%" }}>
               
               {/* --- 1. STAT CATEGORIES (Horizontal Scroll) --- */}
-              {/* UPDATED: Uses CUSTOM_TAB_ORDER instead of CORES directly */}
               <div className="hide-scrollbar" style={{ padding: "16px 12px 0 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
                   {CUSTOM_TAB_ORDER.map((coreId) => {
                   const isOpen = openGroup === coreId;
