@@ -1,99 +1,88 @@
 import { NextResponse } from 'next/server';
 import Parser from 'rss-parser';
 
+type CustomItem = {
+  image?: { url: string };
+  mediaContent?: any;
+  enclosure?: { url: string };
+} & Parser.Item;
+
 const parser = new Parser({
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+  },
   customFields: {
     item: [
-      ['media:content', 'mediaContent', { keepArray: true }],
+      ['media:content', 'mediaContent'],
       ['media:thumbnail', 'mediaThumbnail'],
       ['description', 'description'],
+      ['content:encoded', 'contentEncoded'],
+      ['image', 'image'], 
     ],
   },
 });
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const type = searchParams.get('type') || 'news';
+  const type = searchParams.get('type') || 'updates';
 
   let feedUrl = '';
 
+  // --- SIMPLIFIED SOURCES ---
   switch (type) {
-    case 'prospects':
-      feedUrl = 'https://www.milb.com/feeds/news/rss.xml';
-      break;
-    case 'injuries':
+    case 'updates':
+      // CBS Sports (Kept for images/roster moves)
       feedUrl = 'https://www.cbssports.com/rss/headlines/mlb/'; 
       break;
-    case 'news':
+    case 'prospects':
+      // MLB Trade Rumors Prospects (Reliable text feed)
+      feedUrl = 'https://www.mlbtraderumors.com/prospects/feed';
+      break;
+    case 'breaking':
     default:
-      feedUrl = 'https://www.mlb.com/feeds/news/rss.xml';
+      // Yahoo Sports (Good general news source)
+      feedUrl = 'https://sports.yahoo.com/mlb/rss/';
       break;
   }
 
   try {
     const feed = await parser.parseURL(feedUrl);
     
-    const items = feed.items.slice(0, 20).map(item => {
+    const items = feed.items.slice(0, 20).map((item: CustomItem) => {
       let imageUrl = null;
 
-      // 1. Try structured media:content (The "Correct" Way)
-      if (item.mediaContent) {
-        // If it's an array, look for the 'medium' or 'large' image
-        const contents = Array.isArray(item.mediaContent) ? item.mediaContent : [item.mediaContent];
-        
-        // Find one that is an image and NOT a tracker/thumbnail
-        const bestMedia = contents.find((m: any) => {
-           const url = (m.$?.url || m.url || '').toLowerCase();
-           // Filter out tiny tracking images
-           return url.includes('.jpg') && !url.includes('tracker') && !url.includes('1x1');
-        });
-
-        if (bestMedia) {
-          imageUrl = bestMedia.$?.url || bestMedia.url;
-        }
+      // --- IMAGE LOGIC (Primarily used for 'updates' tab now) ---
+      if (item.image && item.image.url) imageUrl = item.image.url;
+      else if (item.enclosure && item.enclosure.url) imageUrl = item.enclosure.url;
+      else if (item.mediaContent) {
+         const media = Array.isArray(item.mediaContent) ? item.mediaContent[0] : item.mediaContent;
+         if (media && media.$ && media.$.url) imageUrl = media.$.url;
+         else if (media && media.url) imageUrl = media.url;
+      }
+      else if (item.content || item.contentSnippet) {
+         const html = item.content || item.contentSnippet || '';
+         const match = html.match(/src=["']([^"']+\.(jpg|jpeg|png))["']/i);
+         if (match) imageUrl = match[1];
       }
 
-      // 2. Fallback: Enclosure (CBS uses this)
-      if (!imageUrl && item.enclosure && item.enclosure.url) {
-        imageUrl = item.enclosure.url;
+      if (imageUrl && imageUrl.startsWith('http:')) {
+         imageUrl = imageUrl.replace('http:', 'https:');
       }
 
-      // 3. Fallback: Regex Scrape (Last Resort)
-      // Only runs if we haven't found a valid image yet
-      if (!imageUrl) {
-         const rawString = JSON.stringify(item);
-         // Look for common image extensions
-         const match = rawString.match(/https?:\/\/[^"'\s]+\.(jpg|jpeg|png)/i);
-         if (match) {
-            const candidate = match[0];
-            // Sanity check: Don't pick up tracking pixels
-            if (!candidate.includes('tracker') && !candidate.includes('analytics')) {
-               imageUrl = candidate;
-            }
-         }
-      }
-
-      // 4. Final Cleanup & HTTPS Enforcement
-      if (imageUrl) {
-         // Fix mixed content (http vs https)
-         imageUrl = imageUrl.replace('http://', 'https://');
-      } else {
-         // Default Fallback Images (Guaranteed to work)
-         if (type === 'prospects') imageUrl = 'https://img.mlbstatic.com/mlb-images/image/upload/t_16x9/t_w1536/mlb/j8b8575p3j8z575p3j8z.jpg';
-         else imageUrl = 'https://img.mlbstatic.com/mlb-images/image/upload/t_16x9/t_w1536/mlb/k575p3j8z575p3j8z575.jpg';
+      // Default fallback if needed (CBS mostly)
+      if (!imageUrl && type === 'updates') {
+         imageUrl = 'https://sports.cbsimg.net/images/visual/whatshot/MLB_Logo.jpg';
       }
 
       return {
         title: item.title,
         link: item.link,
         pubDate: item.pubDate,
-        summary: item.contentSnippet || item.description || '',
+        summary: item.contentSnippet || item.content || '',
         image: imageUrl
       };
     });
-    
-    // Debugging: Check your terminal to see what URLs are being found!
-    console.log(`[NewsAPI] Fetched ${type}: found ${items.length} items.`);
 
     return NextResponse.json({ items }, { 
       headers: { 'Cache-Control': 'no-store, max-age=0' } 

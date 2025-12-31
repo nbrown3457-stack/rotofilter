@@ -4,13 +4,17 @@ import React, { useState, useEffect } from 'react';
 import { Newspaper, TrendingUp, Activity, X } from 'lucide-react';
 
 const SOURCES = [
-  { id: 'news', name: 'Breaking', icon: <Newspaper size={14} /> },
+  // 1. UPDATES (Front & Center - Images Enabled)
+  { id: 'updates', name: 'Updates', icon: <Activity size={14} /> },
+  // 2. BREAKING (Text Only)
+  { id: 'breaking', name: 'Breaking', icon: <Newspaper size={14} /> },
+  // 3. PROSPECTS (Text Only)
   { id: 'prospects', name: 'Prospects', icon: <TrendingUp size={14} /> },
-  { id: 'injuries', name: 'Updates', icon: <Activity size={14} /> },
 ];
 
-// --- SUB-COMPONENT TO HANDLE IMAGES SAFELY ---
-const NewsCard = ({ item }: { item: any }) => {
+// --- NEWS CARD COMPONENT ---
+// Accepts 'showImage' to toggle layout modes
+const NewsCard = ({ item, showImage }: { item: any; showImage: boolean }) => {
   const [imgSrc, setImgSrc] = useState(item.image);
   const [hasError, setHasError] = useState(false);
 
@@ -19,32 +23,67 @@ const NewsCard = ({ item }: { item: any }) => {
       href={item.link} 
       target="_blank" 
       rel="noopener noreferrer"
-      style={{ display: 'flex', flexDirection: 'column', textDecoration: 'none', background: '#1a1a1a', borderRadius: '8px', overflow: 'hidden', border: '1px solid #333', transition: 'transform 0.2s' }}
+      style={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        textDecoration: 'none', 
+        background: '#1a1a1a', 
+        borderRadius: '8px', 
+        overflow: 'hidden', 
+        border: '1px solid #333', 
+        transition: 'transform 0.2s' 
+      }}
     >
-      <div style={{ height: '140px', overflow: 'hidden', background: '#222', position: 'relative' }}>
-        <img 
-          src={hasError ? "https://www.mlbstatic.com/team-logos/league-on-dark.svg" : imgSrc} 
-          alt="News" 
-          style={{ 
-            width: '100%', 
-            height: '100%', 
-            objectFit: hasError ? 'contain' : 'cover',
-            padding: hasError ? '20px' : '0'
-          }}
-          onError={() => {
-            if (!hasError) {
-              setHasError(true); // Stop the loop immediately
-            }
-          }} 
-        />
-      </div>
+      {/* ONLY RENDER IMAGE IF showImage IS TRUE */}
+      {showImage && (
+        <div style={{ height: '140px', overflow: 'hidden', background: '#222', position: 'relative' }}>
+          <img 
+            src={hasError ? "https://www.mlbstatic.com/team-logos/league-on-dark.svg" : imgSrc} 
+            alt="News" 
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: hasError ? 'contain' : 'cover',
+              padding: hasError ? '20px' : '0'
+            }}
+            onError={() => { if (!hasError) setHasError(true); }} 
+          />
+        </div>
+      )}
       
-      <div style={{ padding: '12px' }}>
-        <h4 style={{ color: '#fff', fontSize: '14px', fontWeight: 700, margin: '0 0 6px 0', lineHeight: '1.4' }}>{item.title}</h4>
-        <p style={{ color: '#999', fontSize: '11px', margin: 0, lineHeight: '1.4', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+      <div style={{ padding: '16px' }}>
+        <h4 style={{ 
+          color: '#fff', 
+          fontSize: '14px', 
+          fontWeight: 700, 
+          margin: '0 0 8px 0', 
+          lineHeight: '1.4' 
+        }}>
+          {item.title}
+        </h4>
+        
+        {/* Slightly larger summary text since there is no image on some cards */}
+        <p style={{ 
+          color: '#bbb', 
+          fontSize: '12px', 
+          margin: 0, 
+          lineHeight: '1.5', 
+          display: '-webkit-box', 
+          WebkitLineClamp: showImage ? 2 : 4, // Show more text if no image
+          WebkitBoxOrient: 'vertical', 
+          overflow: 'hidden' 
+        }}>
           {item.summary ? item.summary.replace(/<[^>]*>?/gm, '') : ''}
         </p>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px', borderTop: '1px solid #333', paddingTop: '8px' }}>
+
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          marginTop: '12px', 
+          borderTop: '1px solid #333', 
+          paddingTop: '8px' 
+        }}>
             <span style={{ color: '#4caf50', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase' }}>READ MORE</span>
             <span style={{ color: '#666', fontSize: '10px' }}>{new Date(item.pubDate).toLocaleDateString()}</span>
         </div>
@@ -54,7 +93,7 @@ const NewsCard = ({ item }: { item: any }) => {
 };
 
 export const NewsDrawer = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
-  const [activeTab, setActiveTab] = useState(SOURCES[0]);
+  const [activeTab, setActiveTab] = useState(SOURCES[0]); // Defaults to Updates
   const [newsItems, setNewsItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -112,7 +151,11 @@ export const NewsDrawer = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {newsItems.map((item, idx) => (
-                <NewsCard key={idx} item={item} />
+                <NewsCard 
+                  key={idx} 
+                  item={item} 
+                  showImage={activeTab.id === 'updates'} // <--- ONLY UPDATES GET IMAGES
+                />
               ))}
               {newsItems.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: '#666', fontSize: '12px' }}>No updates found.</div>}
             </div>
