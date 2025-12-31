@@ -13,6 +13,7 @@ import { UserMenu } from "../components/UserMenu";
 import TeamSwitcher from "../components/TeamSwitcher"; 
 import { useTeam } from '../context/TeamContext';
 import { NewsDrawer } from "../components/NewsDrawer"; 
+import { LoginModal } from "../components/LoginModal"; // <--- NEW IMPORT
 import { Newspaper } from "lucide-react"; 
 
 /* --- 2. CONFIG & TYPES --- */
@@ -292,6 +293,7 @@ export default function Home() {
   const [search, setSearch] = useState(''); 
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isNewsOpen, setIsNewsOpen] = useState(false); 
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false); // <--- NEW STATE FOR LOGIN MODAL
     
   const resultsTableRef = useRef<HTMLDivElement>(null);
 
@@ -345,7 +347,7 @@ export default function Home() {
         // FORCE CLEANUP ON LOGOUT
         document.cookie = "active_team_key=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
         document.cookie = "active_league_key=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
-        setPlayers([]); // Clear the player data
+        setPlayers([]); 
         const saved = localStorage.getItem('rotofilter_presets');
         if (saved) setSavedFilters(JSON.parse(saved));
         else setSavedFilters([]);
@@ -794,26 +796,27 @@ export default function Home() {
               {/* --- UPGRADE BTN (HIDDEN ON MOBILE TO FIT SIGN IN) --- */}
               <button className="upgrade-btn hide-on-mobile" style={{ ...STYLES.btnBase, background: isUserPaid ? 'rgba(255,255,255,0.1)' : '#4caf50', color: '#fff', border: isUserPaid ? '1px solid #333' : 'none', padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, flexShrink: 0, boxShadow: isUserPaid ? 'none' : '0 2px 8px rgba(76, 175, 80, 0.4)' }}>{isUserPaid ? '✔ PRO' : 'UPGRADE'}</button>
               
-              {/* --- AUTH SECTION (VISIBLE ON MOBILE) --- */}
-              <div className="nav-auth-section" style={{ marginLeft: 8 }}>
-                {!user ? (
-                  <button 
-                    className="sign-in-btn"
-                    onClick={() => router.push('/login')} // FIXED NAVIGATION
-                    style={{ 
-                      ...STYLES.btnBase, 
-                      background: '#333', 
-                      color: '#fff', 
-                      marginLeft: 8,
-                      border: '1px solid #555' 
-                    }}
-                  >
-                    Sign In
-                  </button>
-                ) : (
+              {/* --- EXPLICIT SIGN IN BUTTON / USER MENU LOGIC --- */}
+              {!user ? (
+                <button 
+                  className="sign-in-btn"
+                  onClick={() => setIsLoginModalOpen(true)} // FIXED: Opens Modal instead of navigating
+                  style={{ 
+                    ...STYLES.btnBase, 
+                    background: '#333', 
+                    color: '#fff', 
+                    marginLeft: 8,
+                    border: '1px solid #555' 
+                  }}
+                >
+                  Sign In
+                </button>
+              ) : (
+                /* Removed 'desktop-player-info' class so it stays visible on mobile */
+                <div className="nav-auth-section" style={{marginLeft: 8}}>
                   <UserMenu />
-                )}
-              </div>
+                </div>
+              )}
 
           </div>
         </div>
@@ -1256,6 +1259,13 @@ export default function Home() {
       {isSyncModalOpen && (
         <LeagueSyncModal 
           onClose={() => setIsSyncModalOpen(false)} 
+        />
+      )}
+
+      {/* --- LOGIN MODAL (Rendered conditionally) --- */}
+      {isLoginModalOpen && (
+        <LoginModal 
+          onClose={() => setIsLoginModalOpen(false)} 
         />
       )}
 
