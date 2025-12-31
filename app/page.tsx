@@ -111,9 +111,9 @@ const STYLES = {
     
   cardCompact: { 
     borderWidth: "1px", borderStyle: "solid", borderColor: "rgba(255,255,255,0.1)", 
-    borderRadius: 12, background: "rgba(255,255,255,0.98)", padding: "12px 14px", 
+    borderRadius: 12, background: "rgba(255,255,255,0.98)", padding: "8px 10px", // Reduced padding
     boxShadow: "0 4px 20px rgba(0,0,0,0.2)", display: "flex", flexDirection: "column", width: "100%",
-    gap: "8px", transition: "all 0.2s ease"
+    gap: "4px", transition: "all 0.2s ease" // Reduced gap
   } as React.CSSProperties,
 
   label: { fontWeight: 800, fontSize: 10, color: COLORS.GRAY_TEXT, textTransform: "uppercase", letterSpacing: "0.8px" } as React.CSSProperties
@@ -165,11 +165,12 @@ const GlobalStyles = () => (
     .compare-modal-content { background: #fff; width: 100%; max-width: 1000px; max-height: 90vh; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
     .custom-checkbox { width: 16px; height: 16px; border: 2px solid #ccc; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: #fff; }
     .custom-checkbox.checked { background: #1b5e20; border-color: #1b5e20; }
-    .beta-banner { background: linear-gradient(90deg, #1b5e20 0%, #2e7d32 100%); color: rgba(255,255,255,0.9); text-align: center; padding: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; border-bottom: 1px solid rgba(255,255,255,0.1); }
     .nav-link { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 13px; font-weight: 700; padding: 8px 12px; border-radius: 6px; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px; }
     .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
     .nav-link.active { color: #fff; background: #1b5e20; }
-    .mobile-floating-bar { display: none; }
+    
+    .mobile-floating-bar { display: none !important; } /* HIDDEN AS REQUESTED */
+    
     .desktop-nav-links { display: flex; }
     .mobile-bottom-nav { display: none; }
     .hide-scrollbar::-webkit-scrollbar { display: none; }
@@ -193,8 +194,7 @@ const GlobalStyles = () => (
       .sticky-table th:nth-child(1), .sticky-table td:nth-child(1) { width: 80px !important; min-width: 80px !important; max-width: 80px !important; padding: 8px 4px !important; box-shadow: 2px 0 6px rgba(0,0,0,0.15); z-index: 50; }
       .desktop-player-info { display: none !important; }
       .mobile-player-info { display: flex !important; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
-      .mobile-floating-bar { display: flex; position: fixed; top: 64px; left: 0; right: 0; z-index: 90; background: rgba(27, 94, 32, 0.95); backdrop-filter: blur(8px); padding: 10px 20px; align-items: center; justify-content: space-between; color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); animation: slideDown 0.3s ease-out; }
-      @keyframes slideDown { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      /* Floating bar is now hidden via class above */
       .mobile-bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; right: 0; background: #121212; border-top: 1px solid #2a2a2a; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); height: 60px; align-items: center; overflow-x: auto; justify-content: flex-start; box-shadow: 0 -4px 15px rgba(0,0,0,0.5); }
       .mobile-nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #777; font-size: 9px; font-weight: 600; text-decoration: none; min-width: 72px; height: 100%; gap: 4px; transition: color 0.2s ease; }
       .mobile-nav-item.active { color: #fff; }
@@ -913,7 +913,7 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* MOBILE FLOATING RESULTS */}
+      {/* MOBILE FLOATING RESULTS - HIDDEN */}
       <div className="mobile-floating-bar">
         {compareList.length > 0 ? (
           <button onClick={() => setIsCompareOpen(true)} style={{ flex: 1, background: "#1b5e20", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 20, padding: "8px", fontWeight: 900, fontSize: 13, boxShadow: "0 4px 10px rgba(0,0,0,0.3)" }}>COMPARE ({compareList.length})</button>
@@ -956,9 +956,9 @@ export default function Home() {
                     minTools: 0,
                     dateRange: "last_30"
                 })} style={{ ...STYLES.cardCompact, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)", borderTop: "3px solid #d32f2f" }}>
-                    <div style={{ fontWeight: 900, color: "#d32f2f", fontSize: 12 }}>The Sleeping Giant</div>
-                    <div style={{ fontSize: 10, color: "#666" }}>Elite Process, Bad Luck.</div>
-                    <div style={{ fontSize: 9, color: "#888", fontStyle: "italic" }}>Last 30 Days</div>
+                    <div style={{ fontWeight: 900, color: "#d32f2f", fontSize: 11 }}>The Sleeping Giant</div>
+                    <div style={{ fontSize: 9, color: "#666" }}>Elite Process, Bad Luck.</div>
+                    <div style={{ fontSize: 8, color: "#888", fontStyle: "italic" }}>Last 30 Days</div>
                 </div>
 
                 {/* 2. HIDDEN HIGH-FLOOR (Contact) - Blue */}
@@ -970,9 +970,9 @@ export default function Home() {
                     minTools: 1,
                     dateRange: "season_curr"
                 })} style={{ ...STYLES.cardCompact, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)", borderTop: "3px solid #1976d2" }}>
-                    <div style={{ fontWeight: 900, color: "#1976d2", fontSize: 12 }}>Hidden High-Floor</div>
-                    <div style={{ fontSize: 10, color: "#666" }}>Young + Contact + Secret Pop.</div>
-                    <div style={{ fontSize: 9, color: "#888", fontStyle: "italic" }}>Full Season</div>
+                    <div style={{ fontWeight: 900, color: "#1976d2", fontSize: 11 }}>Hidden High-Floor</div>
+                    <div style={{ fontSize: 9, color: "#666" }}>Young + Contact + Secret Pop.</div>
+                    <div style={{ fontSize: 8, color: "#888", fontStyle: "italic" }}>Full Season</div>
                 </div>
 
                 {/* 3. STUFF+ BREAKOUT (Pitching) - Purple */}
@@ -984,9 +984,9 @@ export default function Home() {
                     minTools: 1,
                     dateRange: "last_30"
                 })} style={{ ...STYLES.cardCompact, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)", borderTop: "3px solid #7b1fa2" }}>
-                    <div style={{ fontWeight: 900, color: "#7b1fa2", fontSize: 12 }}>Stuff+ Breakout</div>
-                    <div style={{ fontSize: 10, color: "#666" }}>Elite Shape, Buy-Low ERA.</div>
-                    <div style={{ fontSize: 9, color: "#888", fontStyle: "italic" }}>Last 30 Days</div>
+                    <div style={{ fontWeight: 900, color: "#7b1fa2", fontSize: 11 }}>Stuff+ Breakout</div>
+                    <div style={{ fontSize: 9, color: "#666" }}>Elite Shape, Buy-Low ERA.</div>
+                    <div style={{ fontSize: 8, color: "#888", fontStyle: "italic" }}>Last 30 Days</div>
                 </div>
 
                 {/* 4. GREEN LIGHT SPEEDSTER (Speed) - Yellow */}
@@ -998,9 +998,9 @@ export default function Home() {
                     minTools: 1,
                     dateRange: "last_30"
                 })} style={{ ...STYLES.cardCompact, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)", borderTop: "3px solid #fbc02d" }}>
-                    <div style={{ fontWeight: 900, color: "#f57f17", fontSize: 12 }}>Green Light Speed</div>
-                    <div style={{ fontSize: 10, color: "#666" }}>Elite Wheels + New Aggression.</div>
-                    <div style={{ fontSize: 9, color: "#888", fontStyle: "italic" }}>Last 30 Days</div>
+                    <div style={{ fontWeight: 900, color: "#f57f17", fontSize: 11 }}>Green Light Speed</div>
+                    <div style={{ fontSize: 9, color: "#666" }}>Elite Wheels + New Aggression.</div>
+                    <div style={{ fontSize: 8, color: "#888", fontStyle: "italic" }}>Last 30 Days</div>
                 </div>
 
                 {/* 5. LAUNCH ANGLE FIX (Power) - Orange */}
@@ -1012,9 +1012,9 @@ export default function Home() {
                     minTools: 0,
                     dateRange: "last_30"
                 })} style={{ ...STYLES.cardCompact, flex: "0 0 200px", cursor: "pointer", background: "rgba(255,255,255,0.95)", borderTop: "3px solid #e64a19" }}>
-                    <div style={{ fontWeight: 900, color: "#e64a19", fontSize: 12 }}>Launch Angle Fix</div>
-                    <div style={{ fontSize: 10, color: "#666" }}>Raw Power finding the air.</div>
-                    <div style={{ fontSize: 9, color: "#888", fontStyle: "italic" }}>Last 30 Days</div>
+                    <div style={{ fontWeight: 900, color: "#e64a19", fontSize: 11 }}>Launch Angle Fix</div>
+                    <div style={{ fontSize: 9, color: "#666" }}>Raw Power finding the air.</div>
+                    <div style={{ fontSize: 8, color: "#888", fontStyle: "italic" }}>Last 30 Days</div>
                 </div>
               </>
             )}
@@ -1023,8 +1023,8 @@ export default function Home() {
               <>
                 {savedFilters.length === 0 ? <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, padding: 10 }}>No saved filters yet. Create one below!</div> : savedFilters.map((filter) => (
                   <div key={filter.id} className="preset-card" onClick={() => applyQuickFilter(filter)} style={{ ...STYLES.cardCompact, flex: "0 0 200px", cursor: "pointer", background: "#e8f5e9", borderColor: "#4caf50" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}><div style={{ fontWeight: 900, color: "#2e7d32", fontSize: 12 }}>{filter.name}</div><button onClick={(e) => deleteFilter(filter.id, e)} style={{ background: "none", border: "none", cursor: "pointer", opacity: 0.5 }}><Icons.Trash /></button></div>
-                    <div style={{ fontSize: 10, color: "#555" }}>{filter.stats?.length || 0} Stats • {filter.dateRange || 'Season'}</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}><div style={{ fontWeight: 900, color: "#2e7d32", fontSize: 11 }}>{filter.name}</div><button onClick={(e) => deleteFilter(filter.id, e)} style={{ background: "none", border: "none", cursor: "pointer", opacity: 0.5 }}><Icons.Trash /></button></div>
+                    <div style={{ fontSize: 9, color: "#555" }}>{filter.stats?.length || 0} Stats • {filter.dateRange || 'Season'}</div>
                   </div>
                 ))}
               </>
@@ -1039,14 +1039,61 @@ export default function Home() {
             {/* --- FILTER CONTROL PANEL --- */}
             <div style={{ borderWidth: "1px", borderStyle: "solid", borderColor: "rgba(255,255,255,0.1)", borderRadius: 16, background: "rgba(255,255,255,0.98)", padding: 0, overflow: "visible", boxShadow: "0 10px 40px rgba(0,0,0,0.4)", display: "flex", flexDirection: "column", width: "100%" }}>
               
-              {/* --- 1. GENERAL FILTERS ROW (THE NEW 3 BUTTONS) - MOVED TO TOP --- */}
-              <div className="hide-scrollbar" style={{ padding: "16px 12px 10px 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGeneralGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+               {/* --- 1. RESULTS BAR (NEW TOP POSITION) --- */}
+              <div ref={resultsTableRef} className="hide-scrollbar" style={{ padding: "12px", background: "#fff", borderBottom: "1px solid #eee", display: "flex", alignItems: "center", gap: 10, overflowX: 'auto', whiteSpace: 'nowrap', borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+                
+                  {/* Search Bar - Primary Left Action */}
+                   <input type="text" placeholder="Search Player..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #ddd", fontSize: 12, outline: "none", width: "140px", flexShrink: 0, background: '#f5f5f5' }} />
+
+                  {/* Range Selector */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#f5f5f5", padding: "4px 8px", borderRadius: "8px", border: "1px solid #eee", flexShrink: 0 }}>
+                    <select value={dateRange} onChange={(e) => setDateRange(e.target.value as DateRangeOption)} style={{ ...STYLES.btnBase, padding: "4px 8px", fontSize: 11, height: "28px", borderRadius: "6px", border: 'none', background: 'transparent' }}>
+                      <option value="season_curr">Current Season</option>
+                      <option value="pace_season">Projected Full Season</option>
+                      <option value="season_last">Last Season</option>
+                      <option value="last_7">Last 7 Days</option>
+                      <option value="last_30">Last 30 Days</option>
+                      <option value="last_90">Last 90 Days</option>
+                      <option value="custom">Custom...</option>
+                    </select>
+                  </div>
+                  
+                  {/* Custom Date Inputs (Conditional) */}
+                  {dateRange === "custom" && (
+                     <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, animation: "fadeIn 0.2s" }}>
+                          <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} style={{ ...STYLES.btnBase, padding: "3px 6px", fontSize: 11, width: "110px" }} />
+                          <span style={{ color: "#aaa", fontSize: 10 }}>to</span>
+                          <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} style={{ ...STYLES.btnBase, padding: "3px 6px", fontSize: 11, width: "110px" }} />
+                          <button onClick={applyCustomDates} style={{ ...STYLES.btnBase, background: COLORS.DARK_GREEN, color: "#fff", border: "none", fontSize: 10, padding: "4px 8px", height: 26, fontWeight: 700 }}>Apply</button>
+                     </div>
+                  )}
+
+                  <div style={{flex: 1, minWidth: 10}} />
+
+                  {/* Results Count */}
+                  {loading ? (
+                    <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#666", flexShrink: 0 }}>
+                        <Icons.Spinner />
+                    </span> 
+                  ) : (
+                    <span style={{ fontSize: 11, fontWeight: 800, color: COLORS.DARK_GREEN, background: "#e8f5e9", padding: "6px 12px", borderRadius: 20, flexShrink: 0 }}>
+                        {filteredPlayers.length} Found
+                    </span>
+                  )}
+                  
+                  {/* Reset & Save */}
+                  <button onClick={handleGlobalReset} style={{...STYLES.btnBase, fontSize: 10, padding: "6px 12px", background: "#fff", color: "#666", borderColor: "#ddd", flexShrink: 0}}>Reset</button>
+                  <button onClick={saveCurrentFilter} title="Save current filter" style={{...STYLES.btnBase, fontSize: 10, padding: "6px 12px", background: "#e3f2fd", color: "#0d47a1", borderColor: "#90caf9", display: "flex", alignItems: "center", gap: 4, flexShrink: 0}}><Icons.Save /> Save Filter</button>
+              </div>
+
+              {/* --- 2. GENERAL FILTERS ROW (THE NEW 3 BUTTONS) - MOVED TO TOP --- */}
+              <div className="hide-scrollbar" style={{ padding: "16px 12px 10px 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGeneralGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9" }}>
                    {/* BUTTON 1: League & Level */}
                    <button 
                         onClick={() => { setOpenGeneralGroup(openGeneralGroup === 'league' ? null : 'league'); setOpenGroup(null); }}
                         style={{ ...STYLES.btnBase, display: 'flex', alignItems: 'center', gap: 6, borderRadius: 24, padding: "8px 14px", ...(openGeneralGroup === 'league' ? STYLES.btnSelected : {}) }}
                    >
-                        <Globe size={14} /> League & Level {leagueStatus !== 'all' || level !== 'all' ? <span style={{width: 6, height: 6, borderRadius: '50%', background: openGeneralGroup === 'league' ? '#fff' : COLORS.DARK_GREEN}}></span> : null}
+                        <Globe size={14} color="#0288d1" /> League & Level {leagueStatus !== 'all' || level !== 'all' ? <span style={{width: 6, height: 6, borderRadius: '50%', background: openGeneralGroup === 'league' ? '#fff' : COLORS.DARK_GREEN}}></span> : null}
                    </button>
                    
                    {/* BUTTON 2: Position */}
@@ -1054,7 +1101,7 @@ export default function Home() {
                         onClick={() => { setOpenGeneralGroup(openGeneralGroup === 'position' ? null : 'position'); setOpenGroup(null); }}
                         style={{ ...STYLES.btnBase, display: 'flex', alignItems: 'center', gap: 6, borderRadius: 24, padding: "8px 14px", ...(openGeneralGroup === 'position' ? STYLES.btnSelected : {}) }}
                    >
-                        <Users size={14} /> Position {selectedPositions.length > 0 ? <span style={{width: 6, height: 6, borderRadius: '50%', background: openGeneralGroup === 'position' ? '#fff' : COLORS.DARK_GREEN}}></span> : null}
+                        <Users size={14} color="#e65100" /> Position {selectedPositions.length > 0 ? <span style={{width: 6, height: 6, borderRadius: '50%', background: openGeneralGroup === 'position' ? '#fff' : COLORS.DARK_GREEN}}></span> : null}
                    </button>
                    
                    {/* BUTTON 3: MLB Team */}
@@ -1062,14 +1109,14 @@ export default function Home() {
                         onClick={() => { setOpenGeneralGroup(openGeneralGroup === 'team' ? null : 'team'); setOpenGroup(null); }}
                         style={{ ...STYLES.btnBase, display: 'flex', alignItems: 'center', gap: 6, borderRadius: 24, padding: "8px 14px", ...(openGeneralGroup === 'team' ? STYLES.btnSelected : {}) }}
                    >
-                        <Flag size={14} /> MLB Team {selectedTeams.length < ALL_TEAMS.length ? <span style={{width: 6, height: 6, borderRadius: '50%', background: openGeneralGroup === 'team' ? '#fff' : COLORS.DARK_GREEN}}></span> : null}
+                        <Flag size={14} color="#d32f2f" /> MLB Team {selectedTeams.length < ALL_TEAMS.length ? <span style={{width: 6, height: 6, borderRadius: '50%', background: openGeneralGroup === 'team' ? '#fff' : COLORS.DARK_GREEN}}></span> : null}
                    </button>
               </div>
 
               {/* TRAY FOR GENERAL FILTERS - RENDERED IMMEDIATELY AFTER ITS ROW */}
               {openGeneralGroup && renderGeneralFilterTray()}
 
-              {/* --- 2. STAT CATEGORIES (Horizontal Scroll) - MOVED DOWN --- */}
+              {/* --- 3. STAT CATEGORIES (Horizontal Scroll) - MOVED DOWN --- */}
               <div className="hide-scrollbar" style={{ padding: "10px 12px 16px 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9" }}>
                   {CUSTOM_TAB_ORDER.map((coreId) => {
                   const isOpen = openGroup === coreId;
@@ -1110,51 +1157,6 @@ export default function Home() {
               {/* TRAY FOR STATS - RENDERED IMMEDIATELY AFTER ITS ROW */}
               {openGroup && renderStatFilterTray()}
 
-              {/* --- 4. RESULTS BAR (SCROLLABLE ROW) --- */}
-              <div ref={resultsTableRef} className="hide-scrollbar" style={{ padding: "12px 20px", background: "#fcfcfc", borderBottom: "2px solid #eee", display: "flex", alignItems: "center", gap: 12, overflowX: 'auto', whiteSpace: 'nowrap' }}>
-                
-                  {/* Results Count */}
-                  {loading ? (
-                    <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#666", flexShrink: 0 }}>
-                        <Icons.Spinner /> Scouting...
-                    </span> 
-                  ) : (
-                    <span style={{ fontSize: 11, fontWeight: 800, color: COLORS.DARK_GREEN, background: "#e8f5e9", padding: "6px 12px", borderRadius: 20, flexShrink: 0 }}>
-                        {filteredPlayers.length} Found
-                    </span>
-                  )}
-                  
-                  {/* Reset & Save */}
-                  <button onClick={handleGlobalReset} style={{...STYLES.btnBase, fontSize: 10, padding: "6px 12px", background: "#fdecea", color: "#721c24", borderColor: "#f5c6cb", flexShrink: 0}}>Reset</button>
-                  <button onClick={saveCurrentFilter} title="Save current filter" style={{...STYLES.btnBase, fontSize: 10, padding: "6px 12px", background: "#e3f2fd", color: "#0d47a1", borderColor: "#90caf9", display: "flex", alignItems: "center", gap: 4, flexShrink: 0}}><Icons.Save /> Save</button>
-
-                  {/* Range Selector */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", padding: "4px 8px", borderRadius: "8px", border: "1px solid #eee", flexShrink: 0 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "#999", textTransform: "uppercase", marginRight: 2 }}>📅 Range:</span>
-                    <select value={dateRange} onChange={(e) => setDateRange(e.target.value as DateRangeOption)} style={{ ...STYLES.btnBase, padding: "4px 8px", fontSize: 11, height: "28px", borderRadius: "6px", border: 'none', background: 'transparent' }}>
-                      <option value="season_curr">Current Season</option>
-                      <option value="pace_season">Projected Full Season</option>
-                      <option value="season_last">Last Season</option>
-                      <option value="last_7">Last 7 Days</option>
-                      <option value="last_30">Last 30 Days</option>
-                      <option value="last_90">Last 90 Days</option>
-                      <option value="custom">Custom...</option>
-                    </select>
-                  </div>
-                  
-                  {/* Custom Date Inputs (Conditional) */}
-                  {dateRange === "custom" && (
-                     <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, animation: "fadeIn 0.2s" }}>
-                          <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} style={{ ...STYLES.btnBase, padding: "3px 6px", fontSize: 11, width: "110px" }} />
-                          <span style={{ color: "#aaa", fontSize: 10 }}>to</span>
-                          <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} style={{ ...STYLES.btnBase, padding: "3px 6px", fontSize: 11, width: "110px" }} />
-                          <button onClick={applyCustomDates} style={{ ...STYLES.btnBase, background: COLORS.DARK_GREEN, color: "#fff", border: "none", fontSize: 10, padding: "4px 8px", height: 26, fontWeight: 700 }}>Apply</button>
-                     </div>
-                  )}
-
-                  {/* Search Bar */}
-                  <input type="text" placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ padding: "8px 16px", borderRadius: 20, border: "1px solid #ddd", fontSize: 13, outline: "none", width: "160px", flexShrink: 0 }} />
-              </div>
 
               {/* LEGEND */}
               <ToolLegend />
