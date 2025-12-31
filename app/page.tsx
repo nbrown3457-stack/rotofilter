@@ -11,8 +11,8 @@ import { Icons } from "../components/Icons";
 import { UserMenu } from "../components/UserMenu"; 
 import TeamSwitcher from "../components/TeamSwitcher"; 
 import { useTeam } from '../context/TeamContext';
-import { NewsDrawer } from "../components/NewsDrawer"; // <--- NEW IMPORT
-import { Newspaper } from "lucide-react"; // <--- NEW IMPORT
+import { NewsDrawer } from "../components/NewsDrawer"; 
+import { Newspaper } from "lucide-react"; 
 
 /* --- 2. CONFIG & TYPES --- */
 import type { CoreId } from "../config/cores";
@@ -45,6 +45,19 @@ const ALL_TEAMS = [...AL_TEAMS, ...NL_TEAMS].sort();
 const BATTER_POSITIONS: Position[] = ["C", "1B", "2B", "3B", "SS", "OF", "DH"];
 const PITCHER_POSITIONS: Position[] = ["SP", "RP"];
 const ALL_POSITIONS: Position[] = [...BATTER_POSITIONS, ...PITCHER_POSITIONS];
+
+// NEW: Define the specific order for the category tabs
+const CUSTOM_TAB_ORDER = [
+  "profile",        // Was Context
+  "std_hit",        // Was Basic Bat -> Roto Batting
+  "std_pitch",      // Was Basic Arm -> Roto Pitching
+  "power", 
+  "speed", 
+  "discipline", 
+  "contact", 
+  "pitch_shape", 
+  "pitch_outcomes"
+];
 
 const COLORS = {
   DARK_GREEN: "#1b5e20",
@@ -82,16 +95,16 @@ const PITCHER_STATS = [
   'arm_value', 'arm_strength', 'fielding_runs' 
 ];
 
-/* --- STYLES OBJECTS (Cleanup) --- */
+/* --- STYLES OBJECTS --- */
 const STYLES = {
   btnBase: {
     padding: "6px 10px", borderRadius: 8, borderWidth: "1px", borderStyle: "solid",
     borderColor: COLORS.BORDER, background: "#ffffff", color: "#333",
     cursor: "pointer", fontWeight: 600, fontSize: "12px", transition: "all 0.1s ease",
   } as React.CSSProperties,
-   
+    
   btnSelected: { background: COLORS.DARK_GREEN, borderColor: COLORS.DARK_GREEN, color: "#ffffff" },
-   
+    
   cardCompact: { 
     borderWidth: "1px", borderStyle: "solid", borderColor: "rgba(255,255,255,0.1)", 
     borderRadius: 12, background: "rgba(255,255,255,0.98)", padding: "12px 14px", 
@@ -102,27 +115,27 @@ const STYLES = {
   label: { fontWeight: 800, fontSize: 10, color: COLORS.GRAY_TEXT, textTransform: "uppercase", letterSpacing: "0.8px" } as React.CSSProperties
 };
 
-/* --- ICONS --- */
+/* --- ICONS (UPDATED WITH COLORS) --- */
 const CategoryIcons = {
-  Context: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>,
-  Bat: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l12 12 3-3-12-12z" /></svg>,
-  Power: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.5-3.3a9 9 0 0 0 3 3.3z"></path></svg>,
-  Eye: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>,
-  Target: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>,
-  Speed: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>,
-  Ball: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2v20"></path></svg>,
-  Stuff: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>,
-  Check: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+  Context: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2196f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>,
+  Bat: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l12 12 3-3-12-12z" /></svg>,
+  Power: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f44336" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.5-3.3a9 9 0 0 0 3 3.3z"></path></svg>,
+  Eye: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9c27b0" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>,
+  Target: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#009688" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>,
+  Speed: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>,
+  Ball: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#607d8b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2v20"></path></svg>,
+  Stuff: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3f51b5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>,
+  Check: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
 };
 
 const CATEGORY_DISPLAY: Record<string, { label: string; icon: any }> = {
-  "profile":          { label: "Context",    icon: CategoryIcons.Context },
-  "std_hit":          { label: "Basic Bat",  icon: CategoryIcons.Bat },
+  "profile":          { label: "Profile",    icon: CategoryIcons.Context }, // Renamed from Context
+  "std_hit":          { label: "Roto Batting",  icon: CategoryIcons.Bat }, // Renamed from Basic Bat
   "power":            { label: "Power",      icon: CategoryIcons.Power },
   "discipline":       { label: "Discipline", icon: CategoryIcons.Eye },
   "contact":          { label: "Contact",    icon: CategoryIcons.Target },
   "speed":            { label: "Speed",      icon: CategoryIcons.Speed }, 
-  "std_pitch":        { label: "Basic Arm",  icon: CategoryIcons.Ball },
+  "std_pitch":        { label: "Roto Pitching",  icon: CategoryIcons.Ball }, // Renamed from Basic Arm
   "pitch_shape":      { label: "Stuff",      icon: CategoryIcons.Stuff },
   "pitch_outcomes":   { label: "Outcomes",   icon: CategoryIcons.Check },
 };
@@ -137,8 +150,9 @@ const GlobalStyles = () => (
     .sticky-container { overflow: auto; max-height: 800px; position: relative; }
     .sticky-table { border-collapse: separate; border-spacing: 0; width: 100%; }
     .sticky-table thead th { position: sticky; top: 0; z-index: 20; background: #fafafa; box-shadow: inset 0 -1px 0 #eee; cursor: pointer; user-select: none; }
+    /* FIXED: Explicitly set top:0 for the corner header to handle vertical scrolling properly */
     .sticky-table td:nth-child(1), .sticky-table th:nth-child(1) { position: sticky; left: 0; z-index: 30; background: white; }
-    .sticky-table th:nth-child(1) { z-index: 40; background: #fafafa; }
+    .sticky-table th:nth-child(1) { z-index: 40; background: #fafafa; top: 0; } 
     .sticky-table td:nth-child(1)::after, .sticky-table th:nth-child(1)::after { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: #eee; }
     .preset-card { transition: all 0.2s ease; border: 1px solid rgba(255,255,255,0.1); }
     .preset-card:hover { transform: translateY(-4px); border-color: #1b5e20; box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
@@ -255,7 +269,7 @@ export default function Home() {
   const [dateRange, setDateRange] = useState<DateRangeOption>("season_curr");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
-   
+    
   // --- STATE: UI ---
   const [selectedPlayer, setSelectedPlayer] = useState<any | null>(null);
   const [compareList, setCompareList] = useState<string[]>([]);
@@ -267,7 +281,7 @@ export default function Home() {
   const [search, setSearch] = useState(''); 
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isNewsOpen, setIsNewsOpen] = useState(false); // <--- NEW STATE FOR DRAWER
-   
+    
   const resultsTableRef = useRef<HTMLDivElement>(null);
 
   // --- HELPERS ---
@@ -489,11 +503,11 @@ export default function Home() {
       if (selectedPositions.length > 0 && !selectedPositions.includes(p.position as Position)) return false;
       
       if (level !== "all") {
-         if (level === "rookies") {
-             if (!p.is_rookie && p.level !== 'rookie') return false; 
-         } else {
-             if (p.level !== level) return false;
-         }
+          if (level === "rookies") {
+              if (!p.is_rookie && p.level !== 'rookie') return false; 
+          } else {
+              if (p.level !== level) return false;
+          }
       }
 
       if (!selectedTeams.includes(p.team as TeamAbbr)) return false;
@@ -529,7 +543,7 @@ export default function Home() {
 
 
   /* =============================================================================
-        RENDER FUNCTIONS (De-cluttering Main Return)
+       RENDER FUNCTIONS (De-cluttering Main Return)
    ============================================================================= */
 
   const renderFilterTray = () => {
@@ -880,11 +894,12 @@ export default function Home() {
             <div style={{ borderWidth: "1px", borderStyle: "solid", borderColor: "rgba(255,255,255,0.1)", borderRadius: 16, background: "rgba(255,255,255,0.98)", padding: 0, overflow: "visible", boxShadow: "0 10px 40px rgba(0,0,0,0.4)", display: "flex", flexDirection: "column", width: "100%" }}>
               
               {/* --- 1. STAT CATEGORIES (Horizontal Scroll) --- */}
+              {/* UPDATED: Uses CUSTOM_TAB_ORDER instead of CORES directly */}
               <div className="hide-scrollbar" style={{ padding: "16px 12px 0 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
-                  {CORES.map((core) => {
-                  const isOpen = openGroup === core.id;
-                  const activeCount = CORE_STATS[core.id]?.filter(k => selectedStatKeys.includes(k)).length || 0;
-                  const display = CATEGORY_DISPLAY[core.id] || { label: core.label, icon: null };
+                  {CUSTOM_TAB_ORDER.map((coreId) => {
+                  const isOpen = openGroup === coreId;
+                  const activeCount = CORE_STATS[coreId]?.filter(k => selectedStatKeys.includes(k)).length || 0;
+                  const display = CATEGORY_DISPLAY[coreId] || { label: coreId, icon: null };
 
                   const isActiveStyle = { background: COLORS.DARK_GREEN, color: "white", borderColor: COLORS.DARK_GREEN, boxShadow: "0 4px 12px rgba(27, 94, 32, 0.3)" };
                   const hasFilterStyle = { background: "white", color: COLORS.DARK_GREEN, borderColor: COLORS.DARK_GREEN, borderWidth: "1px" };
@@ -892,9 +907,9 @@ export default function Home() {
                   let currentStyle = isOpen ? isActiveStyle : (activeCount > 0 ? hasFilterStyle : defaultStyle);
 
                   return (
-                      <div key={core.id} style={{ position: "relative", paddingBottom: 12, flexShrink: 0 }}>
+                      <div key={coreId} style={{ position: "relative", paddingBottom: 12, flexShrink: 0 }}>
                       <button 
-                          onClick={() => setOpenGroup(isOpen ? null : core.id)}
+                          onClick={() => setOpenGroup(isOpen ? null : coreId as CoreId)}
                           style={{
                           ...STYLES.btnBase, ...currentStyle,
                           padding: "8px 14px", borderRadius: "24px", fontSize: "12px", fontWeight: (isOpen || activeCount > 0) ? 800 : 600,
@@ -903,7 +918,7 @@ export default function Home() {
                           zIndex: isOpen ? 1002 : 1
                           }}
                       >
-                          {display.icon && <span style={{ opacity: isOpen ? 1 : 0.7 }}>{display.icon}</span>}
+                          {display.icon && <span style={{ opacity: isOpen ? 1 : 1, display: 'flex' }}>{display.icon}</span>}
                           {display.label}
                           {activeCount > 0 && (
                               <span style={{ marginLeft: 4, fontSize: 9, background: isOpen ? "#fff" : COLORS.DARK_GREEN, color: isOpen ? COLORS.DARK_GREEN : "#fff", fontWeight: 900, width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%" }}>
@@ -930,7 +945,7 @@ export default function Home() {
                             { key: "all", label: "All" },
                             { key: "available", label: "FA" },    
                             { key: "my_team", label: "My Team" },                      
-                            { key: "rostered", label: "Rostered" }       
+                            { key: "rostered", label: "Rostered" }        
                           ].map((opt) => { 
                             const isLocked = !isUserPaid && opt.key !== "all"; 
                             return (
