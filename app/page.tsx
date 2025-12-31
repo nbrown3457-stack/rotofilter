@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/app/utils/supabase/client"; 
 import { useRouter } from "next/navigation"; 
+import { Newspaper, Globe, Users, Flag, X, Lightbulb, Flame } from "lucide-react"; // Added Flame icon
 
 /* --- 1. COMPONENTS --- */
 import { PlayerDetailPopup } from "../components/PlayerDetailPopup";
@@ -14,7 +15,6 @@ import TeamSwitcher from "../components/TeamSwitcher";
 import { useTeam } from '../context/TeamContext';
 import { NewsDrawer } from "../components/NewsDrawer"; 
 import { LoginModal } from "../components/LoginModal";
-import { Newspaper, Globe, Users, Flag } from "lucide-react";
 
 /* --- 2. CONFIG & TYPES --- */
 import type { CoreId } from "../config/cores";
@@ -51,7 +51,9 @@ const BATTER_POSITIONS: Position[] = ["C", "1B", "2B", "3B", "SS", "OF", "DH"];
 const PITCHER_POSITIONS: Position[] = ["SP", "RP"];
 const ALL_POSITIONS: Position[] = [...BATTER_POSITIONS, ...PITCHER_POSITIONS];
 
+// ADDED "POPULAR" TO THE START
 const CUSTOM_TAB_ORDER = [
+  "popular", // <--- NEW
   "profile",        
   "std_hit",        
   "std_pitch",      
@@ -61,6 +63,14 @@ const CUSTOM_TAB_ORDER = [
   "contact", 
   "pitch_shape", 
   "pitch_outcomes"
+];
+
+// DEFINING THE POPULAR STATS MANUALLY
+const POPULAR_STATS_LIST = [
+    'hr', 'sb', 'avg', 'ops', // Classics
+    'era', 'whip', 'so', 'sv', // Pitching Classics
+    'exit_velocity_avg', 'barrel_pct', // Statcast Batting
+    'k_pct', 'whiff_pct', 'stuff_plus' // Advanced
 ];
 
 const COLORS = {
@@ -111,9 +121,9 @@ const STYLES = {
     
   cardCompact: { 
     borderWidth: "1px", borderStyle: "solid", borderColor: "rgba(255,255,255,0.1)", 
-    borderRadius: 12, background: "rgba(255,255,255,0.98)", padding: "8px 10px", // Reduced padding
+    borderRadius: 12, background: "rgba(255,255,255,0.98)", padding: "8px 10px", 
     boxShadow: "0 4px 20px rgba(0,0,0,0.2)", display: "flex", flexDirection: "column", width: "100%",
-    gap: "4px", transition: "all 0.2s ease" // Reduced gap
+    gap: "4px", transition: "all 0.2s ease" 
   } as React.CSSProperties,
 
   label: { fontWeight: 800, fontSize: 10, color: COLORS.GRAY_TEXT, textTransform: "uppercase", letterSpacing: "0.8px" } as React.CSSProperties
@@ -121,6 +131,7 @@ const STYLES = {
 
 /* --- ICONS --- */
 const CategoryIcons = {
+  Popular: <Flame size={14} color="#ff9100" fill="#ff9100" />, // NEW ICON
   Context: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2196f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>,
   Bat: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l12 12 3-3-12-12z" /></svg>,
   Power: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f44336" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.5-3.3a9 9 0 0 0 3 3.3z"></path></svg>,
@@ -133,6 +144,7 @@ const CategoryIcons = {
 };
 
 const CATEGORY_DISPLAY: Record<string, { label: string; icon: any }> = {
+  "popular":          { label: "Popular",    icon: CategoryIcons.Popular }, // <--- NEW DISPLAY
   "profile":          { label: "Profile",    icon: CategoryIcons.Context },
   "std_hit":          { label: "Roto Batting",  icon: CategoryIcons.Bat }, 
   "power":            { label: "Power",       icon: CategoryIcons.Power },
@@ -169,7 +181,7 @@ const GlobalStyles = () => (
     .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
     .nav-link.active { color: #fff; background: #1b5e20; }
     
-    .mobile-floating-bar { display: none !important; } /* HIDDEN AS REQUESTED */
+    .mobile-floating-bar { display: none !important; }
     
     .desktop-nav-links { display: flex; }
     .mobile-bottom-nav { display: none; }
@@ -194,7 +206,6 @@ const GlobalStyles = () => (
       .sticky-table th:nth-child(1), .sticky-table td:nth-child(1) { width: 80px !important; min-width: 80px !important; max-width: 80px !important; padding: 8px 4px !important; box-shadow: 2px 0 6px rgba(0,0,0,0.15); z-index: 50; }
       .desktop-player-info { display: none !important; }
       .mobile-player-info { display: flex !important; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
-      /* Floating bar is now hidden via class above */
       .mobile-bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; right: 0; background: #121212; border-top: 1px solid #2a2a2a; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); height: 60px; align-items: center; overflow-x: auto; justify-content: flex-start; box-shadow: 0 -4px 15px rgba(0,0,0,0.5); }
       .mobile-nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #777; font-size: 9px; font-weight: 600; text-decoration: none; min-width: 72px; height: 100%; gap: 4px; transition: color 0.2s ease; }
       .mobile-nav-item.active { color: #fff; }
@@ -214,6 +225,27 @@ const GlobalStyles = () => (
 /* =============================================================================
    SECTION 3 — Sub-Components
 ============================================================================= */
+
+// --- VALUE PROP BANNER ---
+const WelcomeBanner = ({ onDismiss }: { onDismiss: () => void }) => (
+    <div style={{ background: "linear-gradient(90deg, #1a1a1a 0%, #333 100%)", color: "#eee", padding: "12px 16px", borderBottom: "1px solid #444", position: "relative", animation: "slideDown 0.3s ease-out" }}>
+        <div className="wide-container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                 <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(76, 175, 80, 0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <Lightbulb size={18} color="#4caf50" />
+                 </div>
+                 <div>
+                    <div style={{ fontWeight: 900, fontSize: 13, color: "#fff", textTransform: "uppercase", letterSpacing: 0.5 }}>Stop Sorting. Start Finding.</div>
+                    <div style={{ fontSize: 11, color: "#aaa", maxWidth: "600px", lineHeight: 1.3 }}>
+                        Create custom logic (e.g. <em>Age &lt; 25 + Power &gt; 80%</em>) to uncover hidden value <strong>available in your league.</strong>
+                    </div>
+                 </div>
+            </div>
+            <button onClick={onDismiss} style={{ background: "none", border: "none", cursor: "pointer", color: "#777", padding: 4 }}><X size={16} /></button>
+        </div>
+    </div>
+);
+
 const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline, availability, isSelected }: any) => {
   const teamColor = TEAM_PRIMARY[team as TeamAbbr] || "#444";
   const selectionStyle = isSelected 
@@ -271,7 +303,7 @@ export default function Home() {
 
   // --- STATE: FILTERS ---
   const [openGroup, setOpenGroup] = useState<CoreId | null>(null); 
-  const [openGeneralGroup, setOpenGeneralGroup] = useState<GeneralGroup>(null); // NEW STATE FOR GENERAL FILTERS
+  const [openGeneralGroup, setOpenGeneralGroup] = useState<GeneralGroup>(null);
   const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
   const [selectedStatKeys, setSelectedStatKeys] = useState<StatKey[]>([]);
   const [level, setLevel] = useState<Level>("all");
@@ -297,7 +329,8 @@ export default function Home() {
   const [search, setSearch] = useState(''); 
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isNewsOpen, setIsNewsOpen] = useState(false); 
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false); 
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [showWelcomeBanner, setShowWelcomeBanner] = useState(true); 
     
   const resultsTableRef = useRef<HTMLDivElement>(null);
 
@@ -318,8 +351,17 @@ export default function Home() {
         newUrl.searchParams.delete('sync');
         window.history.replaceState({}, '', newUrl);
       }
+      
+      // Check local storage for banner dismissal
+      const bannerDismissed = localStorage.getItem('rotofilter_welcome_dismissed');
+      if (bannerDismissed) setShowWelcomeBanner(false);
     }
   }, []);
+
+  const handleDismissBanner = () => {
+      setShowWelcomeBanner(false);
+      localStorage.setItem('rotofilter_welcome_dismissed', 'true');
+  };
 
   const fetchSavedFilters = async (currentUser: any) => {
     if (!currentUser) return; 
@@ -569,6 +611,10 @@ export default function Home() {
 
   const renderStatFilterTray = () => {
     if (!openGroup) return null;
+    
+    // DECIDE WHICH LIST TO RENDER: POPULAR OR STANDARD GROUP
+    const listToRender = openGroup === 'popular' ? POPULAR_STATS_LIST : CORE_STATS[openGroup];
+
     return (
       <div style={{ background: "#fafafa", borderBottom: "1px solid #ddd", borderTop: `2px solid ${COLORS.DARK_GREEN}`, padding: "20px", boxShadow: "inset 0 4px 12px rgba(0,0,0,0.05)", animation: "slideDownTray 0.2s ease-out" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -581,7 +627,7 @@ export default function Home() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
-            {CUSTOM_TAB_ORDER.includes(openGroup) && CORE_STATS[openGroup]?.map((sk) => {
+            {listToRender?.map((sk) => {
                 const config = STATS[sk]; if (!config) return null; 
                 const isSelected = selectedStatKeys.includes(sk);
                 const isDisabled = config.isPaid && !isUserPaid;
@@ -913,6 +959,10 @@ export default function Home() {
         </div>
       </nav>
 
+      {/* --- NEW WELCOME BANNER (Conditional) --- */}
+      {showWelcomeBanner && <WelcomeBanner onDismiss={handleDismissBanner} />}
+
+
       {/* MOBILE FLOATING RESULTS - HIDDEN */}
       <div className="mobile-floating-bar">
         {compareList.length > 0 ? (
@@ -936,7 +986,7 @@ export default function Home() {
         {/* PRESET TABS */}
         <div style={{ marginBottom: 24, marginTop: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div style={{ ...STYLES.label, color: "rgba(255,255,255,0.8)", display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 18 }}>⚡</span> Scouting Quick Presets</div>
+            <div style={{ ...STYLES.label, color: "rgba(255,255,255,0.8)", display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 18 }}>⚡</span> Scouting Strategies</div>
             <div style={{ display: "flex", gap: 8 }}>
               {(["recommended", "expert", "my_filters"] as const).map(t => (
                 <button key={t} onClick={() => setPresetTab(t)} style={{ padding: "4px 12px", borderRadius: 16, border: "none", background: presetTab === t ? "#4caf50" : "rgba(255,255,255,0.1)", color: presetTab === t ? "#fff" : "rgba(255,255,255,0.6)", fontWeight: 700, fontSize: 11, cursor: "pointer", textTransform: "capitalize" }}>{t.replace("_", " ")}</button>
@@ -1086,7 +1136,7 @@ export default function Home() {
                   <button onClick={saveCurrentFilter} title="Save current filter" style={{...STYLES.btnBase, fontSize: 10, padding: "6px 12px", background: "#e3f2fd", color: "#0d47a1", borderColor: "#90caf9", display: "flex", alignItems: "center", gap: 4, flexShrink: 0}}><Icons.Save /> Save Filter</button>
               </div>
 
-              {/* --- 2. GENERAL FILTERS ROW (THE NEW 3 BUTTONS) - MOVED TO TOP --- */}
+              {/* --- 2. GENERAL FILTERS ROW (THE NEW 3 BUTTONS) --- */}
               <div className="hide-scrollbar" style={{ padding: "16px 12px 10px 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGeneralGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9" }}>
                    {/* BUTTON 1: League & Level */}
                    <button 
@@ -1113,19 +1163,54 @@ export default function Home() {
                    </button>
               </div>
 
-              {/* TRAY FOR GENERAL FILTERS - RENDERED IMMEDIATELY AFTER ITS ROW */}
+              {/* TRAY FOR GENERAL FILTERS */}
               {openGeneralGroup && renderGeneralFilterTray()}
 
-              {/* --- 3. STAT CATEGORIES (Horizontal Scroll) - MOVED DOWN --- */}
+              {/* --- 2.5 ACTIVE FILTER CHIPS (NEW ROW) --- */}
+              {selectedStatKeys.length > 0 && (
+                  <div className="hide-scrollbar" style={{ padding: "0 12px 10px 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", background: "#f9f9f9" }}>
+                      {selectedStatKeys.map(k => {
+                          const config = STATS[k];
+                          const threshold = statThresholds[k];
+                          const direction = config?.goodDirection === "higher" ? ">" : "<";
+                          
+                          if (!config || threshold === undefined) return null;
+
+                          return (
+                              <div key={k} style={{ 
+                                  display: "flex", alignItems: "center", gap: 6, 
+                                  padding: "4px 10px", borderRadius: 20, 
+                                  background: "#e8f5e9", border: "1px solid #c8e6c9",
+                                  fontSize: 11, fontWeight: 700, color: COLORS.DARK_GREEN,
+                                  animation: "fadeIn 0.2s"
+                              }}>
+                                  <span>{config.label} {direction} {threshold}{config.unit === 'percent' ? '%' : ''}</span>
+                                  <button 
+                                    onClick={() => toggleStat(k)}
+                                    style={{ background: "none", border: "none", cursor: "pointer", display: "flex", padding: 0, color: COLORS.DARK_GREEN }}
+                                  >
+                                      <X size={12} />
+                                  </button>
+                              </div>
+                          );
+                      })}
+                  </div>
+              )}
+
+              {/* --- 3. STAT CATEGORIES --- */}
               <div className="hide-scrollbar" style={{ padding: "10px 12px 16px 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9" }}>
                   {CUSTOM_TAB_ORDER.map((coreId) => {
                   const isOpen = openGroup === coreId;
                   const activeCount = CORE_STATS[coreId]?.filter(k => selectedStatKeys.includes(k)).length || 0;
                   const display = CATEGORY_DISPLAY[coreId] || { label: coreId, icon: null };
 
+                  // Special styling for Popular
+                  const isPopular = coreId === 'popular';
+                  
                   const isActiveStyle = { background: COLORS.DARK_GREEN, color: "white", borderColor: COLORS.DARK_GREEN, boxShadow: "0 4px 12px rgba(27, 94, 32, 0.3)" };
                   const hasFilterStyle = { background: "white", color: COLORS.DARK_GREEN, borderColor: COLORS.DARK_GREEN, borderWidth: "1px" };
                   const defaultStyle = { background: "white", color: "#555", borderColor: "transparent", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" };
+                  
                   let currentStyle = isOpen ? isActiveStyle : (activeCount > 0 ? hasFilterStyle : defaultStyle);
 
                   return (
@@ -1137,7 +1222,9 @@ export default function Home() {
                           padding: "8px 14px", borderRadius: "24px", fontSize: "12px", fontWeight: (isOpen || activeCount > 0) ? 800 : 600,
                           display: "flex", alignItems: "center", gap: "6px",
                           border: isOpen ? `1px solid ${COLORS.DARK_GREEN}` : (activeCount > 0 ? `1px solid ${COLORS.DARK_GREEN}` : "1px solid #eee"),
-                          zIndex: isOpen ? 1002 : 1
+                          zIndex: isOpen ? 1002 : 1,
+                          // Add specific coloring for popular button if not active
+                          ...(isPopular && !isOpen && activeCount === 0 ? { border: "1px solid #ffe0b2", background: "#fffbf5", color: "#e65100" } : {})
                           }}
                       >
                           {display.icon && <span style={{ opacity: isOpen ? 1 : 1, display: 'flex' }}>{display.icon}</span>}
@@ -1154,7 +1241,7 @@ export default function Home() {
                   })}
               </div>
 
-              {/* TRAY FOR STATS - RENDERED IMMEDIATELY AFTER ITS ROW */}
+              {/* TRAY FOR STATS */}
               {openGroup && renderStatFilterTray()}
 
 
