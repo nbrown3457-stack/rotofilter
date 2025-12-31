@@ -1,57 +1,94 @@
 import { NextResponse } from 'next/server';
 import Parser from 'rss-parser';
 
-const parser = new Parser();
+// 1. Configure Parser to explicitly look for "media:content"
+const parser = new Parser({
+  customFields: {
+    item: [
+      ['media:content', 'mediaContent'],
+      ['media:thumbnail', 'mediaThumbnail'],
+      ['description', 'description'], // RotoWire often puts updates here
+    ],
+  },
+});
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type') || 'news';
 
-  // 1. Define Sources
-  let feedUrl = 'https://www.mlb.com/feeds/news/rss.xml'; // Default: Breaking News
-  
-  if (type === 'prospects') {
-    // Official MLB Pipeline Feed (High quality prospect news)
-    feedUrl = 'https://www.mlb.com/feeds/news/rss.xml'; 
-  } else if (type === 'injuries') {
-    // Rotowire or similar often have feeds, but MLB is safest for images
-    // We can filter the main feed or find a specific fantasy feed later
-    feedUrl = 'https://www.mlb.com/feeds/news/rss.xml';
+  // 2. Define DISTINCT Sources
+  let feedUrl = '';
+
+  switch (type) {
+    case 'prospects':
+      // Official MiLB (Minor League) Feed - 100% Prospect focused
+      feedUrl = 'https://www.milb.com/feeds/news/rss.xml';
+      break;
+    case 'injuries':
+      // Rotowire MLB News - Best for Lineups/Injuries
+      feedUrl = 'https://www.rotowire.com/rss/news.htm?sport=mlb'; 
+      break;
+    case 'news':
+    default:
+      // Official MLB Breaking News
+      feedUrl = 'https://www.mlb.com/feeds/news/rss.xml';
+      break;
   }
 
   try {
-    // 2. Fetch and Parse
     const feed = await parser.parseURL(feedUrl);
     
-    // 3. Clean up the data for your frontend
-    // We filter slightly based on the 'type' requested to simulate categories
-    const items = feed.items.slice(0, 15).map(item => {
-      // MLB RSS feeds often put the image in 'enclosure' or 'content'
-      // We try to find a high-res image if possible
-      let imageUrl = '/api/placeholder/400/200'; // Fallback
+    const items = feed.items.slice(0, 20).map(item => {
+      let imageUrl = '/api/placeholder/400/200'; // Default Fallback
+
+      // --- IMAGE FINDING LOGIC ---
       
-      // Try to find the MLB photo URL in the RSS enclosure
+      // 1. Try "enclosure" (Standard)
       if (item.enclosure && item.enclosure.url) {
         imageUrl = item.enclosure.url;
-      } 
-      // Sometimes it's in the content snippet
-      else if (item.content && item.content.includes('src="')) {
-         const match = item.content.match(/src="([^"]+)"/);
+      }
+      // 2. Try "media:content" (MLB/MiLB standard)
+      // @ts-ignore
+      else if (item.mediaContent && item.mediaContent.$?.url) {
+        // @ts-ignore
+        imageUrl = item.mediaContent.$.url;
+      }
+      // @ts-ignore
+      else if (item.mediaContent && item.mediaContent.url) {
+        // @ts-ignore
+        imageUrl = item.mediaContent.url;
+      }
+      // 3. Try HTML Scrape (Rotowire often puts images in description)
+      else if (item.content || item.description) {
+         const html = item.content || item.description || '';
+         const match = html.match(/src=["']([^"']+)["']/);
          if (match) imageUrl = match[1];
+      }
+
+      // Cleanup: Rotowire images are sometimes relative (missing https)
+      if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/api')) {
+          // If it's just a path, it might be safer to revert to placeholder 
+          // unless we know the base domain.
+          imageUrl = '/api/placeholder/400/200'; 
       }
 
       return {
         title: item.title,
         link: item.link,
         pubDate: item.pubDate,
-        content: item.contentSnippet,
+        // Rotowire puts the actual player update in 'description', MLB uses 'contentSnippet'
+        summary: item.contentSnippet || item.description || '',
         image: imageUrl
       };
     });
 
-    return NextResponse.json({ items });
+    // Return with "no-store" header to prevent caching same results
+    return NextResponse.json({ items }, { 
+      headers: { 'Cache-Control': 'no-store, max-age=0' } 
+    });
     
   } catch (error) {
+    console.error("RSS Error:", error);
     return NextResponse.json({ error: 'Failed to fetch news' }, { status: 500 });
   }
 }
