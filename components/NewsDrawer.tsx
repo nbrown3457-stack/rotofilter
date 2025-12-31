@@ -11,40 +11,61 @@ export const NewsDrawer = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   const [activeTab, setActiveTab] = useState(SOURCES[0]);
   const feedContainerRef = useRef<HTMLDivElement>(null);
 
-  // 1. Load the Twitter/X Script manually (No library needed)
+  // 1. Initialize Twitter Widget (The Robust Way)
   useEffect(() => {
-    const scriptId = "twitter-wjs";
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement("script");
-      script.id = scriptId;
-      script.src = "https://platform.twitter.com/widgets.js";
-      script.async = true;
-      document.body.appendChild(script);
+    // This function creates the 'twttr' object immediately if it doesn't exist
+    // This prevents the "Race Condition" where we try to use it before it loads.
+    if (!(window as any).twttr) {
+      (window as any).twttr = (function (d, s, id) {
+        var js, fjs = d.getElementsByTagName(s)[0],
+          t = (window as any).twttr || {};
+        if (d.getElementById(id)) return t;
+        js = d.createElement(s) as HTMLScriptElement;
+        js.id = id;
+        js.src = "https://platform.twitter.com/widgets.js";
+        if (fjs && fjs.parentNode) {
+            fjs.parentNode.insertBefore(js, fjs);
+        } else {
+            document.head.appendChild(js);
+        }
+
+        t._e = [];
+        t.ready = function (f: any) {
+          t._e.push(f);
+        };
+
+        return t;
+      })(document, "script", "twitter-wjs");
     }
   }, []);
 
-  // 2. Force the widget to reload when you switch tabs or open the drawer
+  // 2. Render the Timeline
   useEffect(() => {
     if (isOpen && (window as any).twttr) {
-      // Clear previous content to prevent duplicates
+      // Clear previous content
       if (feedContainerRef.current) {
-        feedContainerRef.current.innerHTML = ""; 
+        feedContainerRef.current.innerHTML = "";
       }
-      
-      // Re-create the timeline element
+
+      // Create the link element that Twitter transforms
       const link = document.createElement("a");
       link.className = "twitter-timeline";
       link.setAttribute("data-theme", "dark");
       link.setAttribute("data-noheader", "true");
       link.setAttribute("data-nofooter", "true");
       link.setAttribute("data-chrome", "transparent noheader nofooter noborders");
+      // Height is crucial for the widget to know how much space to take
+      link.setAttribute("data-height", "1000"); 
       link.href = `https://twitter.com/${activeTab.handle}`;
       link.innerText = `Loading ${activeTab.name}...`;
 
       if (feedContainerRef.current) {
         feedContainerRef.current.appendChild(link);
-        // Tell Twitter to scan the new element and render it
-        (window as any).twttr.widgets.load(feedContainerRef.current);
+        
+        // Use the .ready() queue to ensure we only render when the script is done
+        (window as any).twttr.ready((twttr: any) => {
+            twttr.widgets.load(feedContainerRef.current);
+        });
       }
     }
   }, [activeTab, isOpen]);
@@ -94,7 +115,7 @@ export const NewsDrawer = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
         <div style={styles.header}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{ width: '8px', height: '8px', background: '#4caf50', borderRadius: '50%', boxShadow: '0 0 10px #4caf50' }} />
-            <span style={{ fontWeight: 900, color: '#fff', fontSize: '16px' }}>ROTO<span style={{color:'#4caf50'}}>FILTER</span></span>
+            <span style={{ fontWeight: 900, color: '#fff', fontSize: '16px' }}>ROTO<span style={{color:'#4caf50'}}>WIRE</span></span>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer' }}>
             <X size={24} />
@@ -113,7 +134,7 @@ export const NewsDrawer = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
         {/* Twitter Feed Container */}
         <div style={{ flex: 1, overflowY: 'auto', background: '#000', padding: '0px', position: 'relative' }} className="hide-scrollbar">
           
-          {/* Skeleton Loader (Shows behind the feed while loading) */}
+          {/* Skeleton Loader */}
           <div style={{ padding: '20px', position: 'absolute', width: '100%', zIndex: 0 }}>
              {[1,2,3,4,5].map(i => (
                 <div key={i} style={{ marginBottom: '20px', display: 'flex', gap: '10px', opacity: 0.2 }}>
@@ -126,7 +147,7 @@ export const NewsDrawer = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
              ))}
           </div>
           
-          {/* The Actual Feed - Populated by the useEffect above */}
+          {/* The Actual Feed */}
           <div 
             ref={feedContainerRef} 
             style={{ position: 'relative', zIndex: 10, minHeight: '100%', padding: '10px' }} 
