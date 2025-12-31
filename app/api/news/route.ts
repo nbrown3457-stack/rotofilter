@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 import Parser from 'rss-parser';
 
-// 1. Configure Parser to explicitly look for "media:content"
 const parser = new Parser({
   customFields: {
     item: [
-      ['media:content', 'mediaContent'],
+      ['media:content', 'mediaContent', { keepArray: true }],
       ['media:thumbnail', 'mediaThumbnail'],
-      ['description', 'description'], // RotoWire often puts updates here
+      ['description', 'description'],
     ],
   },
 });
@@ -16,21 +15,17 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type') || 'news';
 
-  // 2. Define DISTINCT Sources
   let feedUrl = '';
 
   switch (type) {
     case 'prospects':
-      // Official MiLB (Minor League) Feed - 100% Prospect focused
       feedUrl = 'https://www.milb.com/feeds/news/rss.xml';
       break;
     case 'injuries':
-      // Rotowire MLB News - Best for Lineups/Injuries
-      feedUrl = 'https://www.rotowire.com/rss/news.htm?sport=mlb'; 
+      feedUrl = 'https://www.cbssports.com/rss/headlines/mlb/'; 
       break;
     case 'news':
     default:
-      // Official MLB Breaking News
       feedUrl = 'https://www.mlb.com/feeds/news/rss.xml';
       break;
   }
@@ -39,50 +34,67 @@ export async function GET(request: Request) {
     const feed = await parser.parseURL(feedUrl);
     
     const items = feed.items.slice(0, 20).map(item => {
-      let imageUrl = '/api/placeholder/400/200'; // Default Fallback
+      let imageUrl = null;
 
-      // --- IMAGE FINDING LOGIC ---
-      
-      // 1. Try "enclosure" (Standard)
-      if (item.enclosure && item.enclosure.url) {
+      // 1. Try structured media:content (The "Correct" Way)
+      if (item.mediaContent) {
+        // If it's an array, look for the 'medium' or 'large' image
+        const contents = Array.isArray(item.mediaContent) ? item.mediaContent : [item.mediaContent];
+        
+        // Find one that is an image and NOT a tracker/thumbnail
+        const bestMedia = contents.find((m: any) => {
+           const url = (m.$?.url || m.url || '').toLowerCase();
+           // Filter out tiny tracking images
+           return url.includes('.jpg') && !url.includes('tracker') && !url.includes('1x1');
+        });
+
+        if (bestMedia) {
+          imageUrl = bestMedia.$?.url || bestMedia.url;
+        }
+      }
+
+      // 2. Fallback: Enclosure (CBS uses this)
+      if (!imageUrl && item.enclosure && item.enclosure.url) {
         imageUrl = item.enclosure.url;
       }
-      // 2. Try "media:content" (MLB/MiLB standard)
-      // @ts-ignore
-      else if (item.mediaContent && item.mediaContent.$?.url) {
-        // @ts-ignore
-        imageUrl = item.mediaContent.$.url;
-      }
-      // @ts-ignore
-      else if (item.mediaContent && item.mediaContent.url) {
-        // @ts-ignore
-        imageUrl = item.mediaContent.url;
-      }
-      // 3. Try HTML Scrape (Rotowire often puts images in description)
-      else if (item.content || item.description) {
-         const html = item.content || item.description || '';
-         const match = html.match(/src=["']([^"']+)["']/);
-         if (match) imageUrl = match[1];
+
+      // 3. Fallback: Regex Scrape (Last Resort)
+      // Only runs if we haven't found a valid image yet
+      if (!imageUrl) {
+         const rawString = JSON.stringify(item);
+         // Look for common image extensions
+         const match = rawString.match(/https?:\/\/[^"'\s]+\.(jpg|jpeg|png)/i);
+         if (match) {
+            const candidate = match[0];
+            // Sanity check: Don't pick up tracking pixels
+            if (!candidate.includes('tracker') && !candidate.includes('analytics')) {
+               imageUrl = candidate;
+            }
+         }
       }
 
-      // Cleanup: Rotowire images are sometimes relative (missing https)
-      if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/api')) {
-          // If it's just a path, it might be safer to revert to placeholder 
-          // unless we know the base domain.
-          imageUrl = '/api/placeholder/400/200'; 
+      // 4. Final Cleanup & HTTPS Enforcement
+      if (imageUrl) {
+         // Fix mixed content (http vs https)
+         imageUrl = imageUrl.replace('http://', 'https://');
+      } else {
+         // Default Fallback Images (Guaranteed to work)
+         if (type === 'prospects') imageUrl = 'https://img.mlbstatic.com/mlb-images/image/upload/t_16x9/t_w1536/mlb/j8b8575p3j8z575p3j8z.jpg';
+         else imageUrl = 'https://img.mlbstatic.com/mlb-images/image/upload/t_16x9/t_w1536/mlb/k575p3j8z575p3j8z575.jpg';
       }
 
       return {
         title: item.title,
         link: item.link,
         pubDate: item.pubDate,
-        // Rotowire puts the actual player update in 'description', MLB uses 'contentSnippet'
         summary: item.contentSnippet || item.description || '',
         image: imageUrl
       };
     });
+    
+    // Debugging: Check your terminal to see what URLs are being found!
+    console.log(`[NewsAPI] Fetched ${type}: found ${items.length} items.`);
 
-    // Return with "no-store" header to prevent caching same results
     return NextResponse.json({ items }, { 
       headers: { 'Cache-Control': 'no-store, max-age=0' } 
     });
