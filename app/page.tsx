@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/app/utils/supabase/client"; 
-import { useRouter } from "next/navigation"; // <--- Added for smoother navigation
+import { useRouter } from "next/navigation"; 
 
 /* --- 1. COMPONENTS --- */
 import { PlayerDetailPopup } from "../components/PlayerDetailPopup";
@@ -172,10 +172,20 @@ const GlobalStyles = () => (
     .hide-scrollbar { -ms-overflow-style: none;  scrollbar-width: none; }
     .wide-container { width: 98%; max-width: 2500px; margin: 0 auto; }
     .main-padding { padding: 8px; }
+    
+    .nav-auth-section { display: flex; align-items: center; }
+
     @media (max-width: 768px) {
       .wide-container { width: 99.5%; } 
       .main-padding { padding: 4px !important; }
       .desktop-nav-links { display: none !important; }
+      
+      /* HIDE UPGRADE BTN ON MOBILE TO MAKE ROOM FOR SIGN IN */
+      .upgrade-btn { display: none !important; }
+      
+      /* ENSURE AUTH SECTION IS VISIBLE */
+      .nav-auth-section { display: flex !important; }
+
       .sticky-table th:nth-child(1), .sticky-table td:nth-child(1) { width: 80px !important; min-width: 80px !important; max-width: 80px !important; padding: 8px 4px !important; box-shadow: 2px 0 6px rgba(0,0,0,0.15); z-index: 50; }
       .desktop-player-info { display: none !important; }
       .mobile-player-info { display: flex !important; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
@@ -190,7 +200,6 @@ const GlobalStyles = () => (
     * { box-sizing: border-box; }
     html, body { overflow-x: hidden; width: 100%; margin: 0; padding: 0; }
     @media (max-width: 600px) {
-      .upgrade-btn { padding: 4px 10px !important; font-size: 10px !important; border-radius: 12px !important; }
       .nav-logo-text { font-size: 16px !important; }
       .nav-logo-subtext { display: none; }
     }
@@ -247,7 +256,7 @@ const ToolLegend = () => (
 export default function Home() {
   const supabase = createClient();
   const { activeTeam } = useTeam();
-  const router = useRouter(); // <--- Added hook
+  const router = useRouter(); 
 
   // --- STATE: DATA ---
   const [players, setPlayers] = useState<any[]>([]);
@@ -333,8 +342,10 @@ export default function Home() {
       if (currentUser) {
         fetchSavedFilters(currentUser); 
       } else {
+        // FORCE CLEANUP ON LOGOUT
         document.cookie = "active_team_key=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
         document.cookie = "active_league_key=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+        setPlayers([]); // Clear the player data
         const saved = localStorage.getItem('rotofilter_presets');
         if (saved) setSavedFilters(JSON.parse(saved));
         else setSavedFilters([]);
@@ -776,29 +787,33 @@ export default function Home() {
               <button onClick={() => setIsSyncModalOpen(true)} title="Sync League" onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4caf50'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#333'} style={{ width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: '#333', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.3)', flexShrink: 0, transition: 'background 0.2s' }}>
                 <div style={{ transform: 'scale(0.8)' }}><Icons.Sync /></div>
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}><TeamSwitcher /></div>
-              <button className="upgrade-btn" style={{ ...STYLES.btnBase, background: isUserPaid ? 'rgba(255,255,255,0.1)' : '#4caf50', color: '#fff', border: isUserPaid ? '1px solid #333' : 'none', padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, flexShrink: 0, boxShadow: isUserPaid ? 'none' : '0 2px 8px rgba(76, 175, 80, 0.4)' }}>{isUserPaid ? '✔ PRO' : 'UPGRADE'}</button>
               
-              {/* --- EXPLICIT SIGN IN BUTTON / USER MENU LOGIC --- */}
-              {!user ? (
-                <button 
-                  onClick={() => router.push('/login')} // FIXED NAVIGATION
-                  style={{ 
-                    ...STYLES.btnBase, 
-                    background: '#333', 
-                    color: '#fff', 
-                    marginLeft: 8,
-                    border: '1px solid #555' 
-                  }}
-                >
-                  Sign In
-                </button>
-              ) : (
-                /* Removed 'desktop-player-info' class so it stays visible on mobile */
-                <div style={{ marginLeft: 8 }}>
+              {/* --- TEAM SWITCHER (VISIBLE ON MOBILE) --- */}
+              <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}><TeamSwitcher /></div>
+              
+              {/* --- UPGRADE BTN (HIDDEN ON MOBILE TO FIT SIGN IN) --- */}
+              <button className="upgrade-btn hide-on-mobile" style={{ ...STYLES.btnBase, background: isUserPaid ? 'rgba(255,255,255,0.1)' : '#4caf50', color: '#fff', border: isUserPaid ? '1px solid #333' : 'none', padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, flexShrink: 0, boxShadow: isUserPaid ? 'none' : '0 2px 8px rgba(76, 175, 80, 0.4)' }}>{isUserPaid ? '✔ PRO' : 'UPGRADE'}</button>
+              
+              {/* --- AUTH SECTION (VISIBLE ON MOBILE) --- */}
+              <div className="nav-auth-section" style={{ marginLeft: 8 }}>
+                {!user ? (
+                  <button 
+                    className="sign-in-btn"
+                    onClick={() => router.push('/login')} // FIXED NAVIGATION
+                    style={{ 
+                      ...STYLES.btnBase, 
+                      background: '#333', 
+                      color: '#fff', 
+                      marginLeft: 8,
+                      border: '1px solid #555' 
+                    }}
+                  >
+                    Sign In
+                  </button>
+                ) : (
                   <UserMenu />
-                </div>
-              )}
+                )}
+              </div>
 
           </div>
         </div>
