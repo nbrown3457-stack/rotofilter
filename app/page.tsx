@@ -172,14 +172,19 @@ const GlobalStyles = () => (
     .wide-container { width: 98%; max-width: 2500px; margin: 0 auto; }
     .main-padding { padding: 8px; }
     
-    .sign-in-btn { display: flex !important; }
+    .nav-auth-section { display: flex; align-items: center; }
 
     @media (max-width: 768px) {
       .wide-container { width: 99.5%; } 
       .main-padding { padding: 4px !important; }
       .desktop-nav-links { display: none !important; }
+      
       /* HIDE UPGRADE BTN ON MOBILE TO MAKE ROOM FOR SIGN IN */
       .upgrade-btn { display: none !important; }
+      
+      /* ENSURE AUTH SECTION IS VISIBLE */
+      .nav-auth-section { display: flex !important; }
+
       .sticky-table th:nth-child(1), .sticky-table td:nth-child(1) { width: 80px !important; min-width: 80px !important; max-width: 80px !important; padding: 8px 4px !important; box-shadow: 2px 0 6px rgba(0,0,0,0.15); z-index: 50; }
       .desktop-player-info { display: none !important; }
       .mobile-player-info { display: flex !important; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
@@ -743,7 +748,7 @@ export default function Home() {
                     lineHeight: '1',
                     textShadow: '0 0 5px rgba(255, 215, 0, 0.4)'
                   }}>
-                    {(activeTeam as any).name ?? "My Team"}
+                    {(activeTeam as any).name || (activeTeam as any).team_name || "My Team"}
                   </span>
                 ) : (
                   <span className="nav-logo-subtext" style={{ fontSize: '10px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', lineHeight: '1' }}>Data Driving Dominance</span>
@@ -797,7 +802,7 @@ export default function Home() {
                   Sign In
                 </button>
               ) : (
-                <div className="desktop-player-info" style={{marginLeft: 8}}>
+                <div className="nav-auth-section" style={{marginLeft: 8}}>
                   <UserMenu />
                 </div>
               )}
