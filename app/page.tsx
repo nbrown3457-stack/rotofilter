@@ -142,6 +142,8 @@ const CATEGORY_DISPLAY: Record<string, { label: string; icon: any }> = {
 /* --- GLOBAL STYLES & ANIMATIONS --- */
 const GlobalStyles = () => (
   <style dangerouslySetInnerHTML={{ __html: `
+    @import url('https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap');
+    
     @keyframes pulse-ring { 0% { transform: scale(0.33); opacity: 1; } 80%, 100% { opacity: 0; } }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .news-pulse { position: absolute; top: -2px; right: -2px; width: 12px; height: 12px; background-color: #ff1744; border-radius: 50%; border: 2px solid white; z-index: 10; }
@@ -169,10 +171,15 @@ const GlobalStyles = () => (
     .hide-scrollbar { -ms-overflow-style: none;  scrollbar-width: none; }
     .wide-container { width: 98%; max-width: 2500px; margin: 0 auto; }
     .main-padding { padding: 8px; }
+    
+    .sign-in-btn { display: flex !important; }
+
     @media (max-width: 768px) {
       .wide-container { width: 99.5%; } 
       .main-padding { padding: 4px !important; }
       .desktop-nav-links { display: none !important; }
+      /* HIDE UPGRADE BTN ON MOBILE TO MAKE ROOM FOR SIGN IN */
+      .upgrade-btn { display: none !important; }
       .sticky-table th:nth-child(1), .sticky-table td:nth-child(1) { width: 80px !important; min-width: 80px !important; max-width: 80px !important; padding: 8px 4px !important; box-shadow: 2px 0 6px rgba(0,0,0,0.15); z-index: 50; }
       .desktop-player-info { display: none !important; }
       .mobile-player-info { display: flex !important; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
@@ -187,7 +194,6 @@ const GlobalStyles = () => (
     * { box-sizing: border-box; }
     html, body { overflow-x: hidden; width: 100%; margin: 0; padding: 0; }
     @media (max-width: 600px) {
-      .upgrade-btn { padding: 4px 10px !important; font-size: 10px !important; border-radius: 12px !important; }
       .nav-logo-text { font-size: 16px !important; }
       .nav-logo-subtext { display: none; }
     }
@@ -726,18 +732,18 @@ export default function Home() {
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span className="nav-logo-text" style={{ fontWeight: 900, fontSize: '20px', color: '#fff', letterSpacing: '-0.5px', lineHeight: '1' }}>ROTO<span style={{ color: '#4caf50' }}>FILTER</span></span>
                 
-                {/* --- CHANGED: CONDITIONAL TEAM NAME DISPLAY --- */}
+                {/* --- TEAM NAME WITH EDGY FONT --- */}
                 {user && activeTeam ? (
                   <span style={{ 
                     color: '#FFD700', // Lightning Yellow
-                    fontFamily: 'fantasy, Impact, sans-serif', 
+                    fontFamily: '"Permanent Marker", cursive', 
                     fontSize: '12px', 
                     marginTop: '2px', 
                     letterSpacing: '1px', 
                     lineHeight: '1',
                     textShadow: '0 0 5px rgba(255, 215, 0, 0.4)'
                   }}>
-                    {activeTeam.name || "My Team"}
+                    {(activeTeam as any).name ?? "My Team"}
                   </span>
                 ) : (
                   <span className="nav-logo-subtext" style={{ fontSize: '10px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', lineHeight: '1' }}>Data Driving Dominance</span>
@@ -775,9 +781,10 @@ export default function Home() {
               <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}><TeamSwitcher /></div>
               <button className="upgrade-btn" style={{ ...STYLES.btnBase, background: isUserPaid ? 'rgba(255,255,255,0.1)' : '#4caf50', color: '#fff', border: isUserPaid ? '1px solid #333' : 'none', padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 800, flexShrink: 0, boxShadow: isUserPaid ? 'none' : '0 2px 8px rgba(76, 175, 80, 0.4)' }}>{isUserPaid ? '✔ PRO' : 'UPGRADE'}</button>
               
-              {/* --- CHANGED: EXPLICIT SIGN IN BUTTON LOGIC --- */}
+              {/* --- EXPLICIT SIGN IN BUTTON LOGIC --- */}
               {!user ? (
                 <button 
+                  className="sign-in-btn"
                   onClick={() => window.location.href = '/login'} 
                   style={{ 
                     ...STYLES.btnBase, 
@@ -794,7 +801,6 @@ export default function Home() {
                   <UserMenu />
                 </div>
               )}
-              {/* ----------------------------------------------- */}
 
           </div>
         </div>
