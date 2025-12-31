@@ -13,8 +13,8 @@ import { UserMenu } from "../components/UserMenu";
 import TeamSwitcher from "../components/TeamSwitcher"; 
 import { useTeam } from '../context/TeamContext';
 import { NewsDrawer } from "../components/NewsDrawer"; 
-import { LoginModal } from "../components/LoginModal"; // <--- NEW IMPORT
-import { Newspaper } from "lucide-react"; 
+import { LoginModal } from "../components/LoginModal";
+import { Newspaper, Globe, Users, Flag } from "lucide-react";
 
 /* --- 2. CONFIG & TYPES --- */
 import type { CoreId } from "../config/cores";
@@ -40,6 +40,9 @@ type Level = "all" | "mlb" | "prospects" | "rookies";
 type LeagueStatus = "all" | "available" | "rostered" | "my_team";
 type FilterTab = "recommended" | "expert" | "my_filters";
 type TeamAbbr = (typeof ALL_TEAMS)[number];
+
+// NEW TYPE FOR GENERAL GROUPS
+type GeneralGroup = "league" | "position" | "team" | null;
 
 const AL_TEAMS = ["BAL","BOS","CWS","CLE","DET","HOU","KC","LAA","MIN","NYY","OAK","SEA","TB","TEX","TOR"] as const;
 const NL_TEAMS = ["ARI","ATL","CHC","CIN","COL","LAD","MIA","MIL","NYM","PHI","PIT","SD","SF","STL","WSH"] as const;
@@ -132,13 +135,13 @@ const CategoryIcons = {
 const CATEGORY_DISPLAY: Record<string, { label: string; icon: any }> = {
   "profile":          { label: "Profile",    icon: CategoryIcons.Context },
   "std_hit":          { label: "Roto Batting",  icon: CategoryIcons.Bat }, 
-  "power":            { label: "Power",      icon: CategoryIcons.Power },
+  "power":            { label: "Power",       icon: CategoryIcons.Power },
   "discipline":       { label: "Discipline", icon: CategoryIcons.Eye },
-  "contact":          { label: "Contact",    icon: CategoryIcons.Target },
-  "speed":            { label: "Speed",      icon: CategoryIcons.Speed }, 
+  "contact":          { label: "Contact",     icon: CategoryIcons.Target },
+  "speed":            { label: "Speed",       icon: CategoryIcons.Speed }, 
   "std_pitch":        { label: "Roto Pitching",  icon: CategoryIcons.Ball }, 
-  "pitch_shape":      { label: "Stuff",      icon: CategoryIcons.Stuff },
-  "pitch_outcomes":   { label: "Outcomes",   icon: CategoryIcons.Check },
+  "pitch_shape":      { label: "Stuff",       icon: CategoryIcons.Stuff },
+  "pitch_outcomes":   { label: "Outcomes",    icon: CategoryIcons.Check },
 };
 
 /* --- GLOBAL STYLES & ANIMATIONS --- */
@@ -268,6 +271,7 @@ export default function Home() {
 
   // --- STATE: FILTERS ---
   const [openGroup, setOpenGroup] = useState<CoreId | null>(null); 
+  const [openGeneralGroup, setOpenGeneralGroup] = useState<GeneralGroup>(null); // NEW STATE FOR GENERAL FILTERS
   const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
   const [selectedStatKeys, setSelectedStatKeys] = useState<StatKey[]>([]);
   const [level, setLevel] = useState<Level>("all");
@@ -293,7 +297,7 @@ export default function Home() {
   const [search, setSearch] = useState(''); 
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isNewsOpen, setIsNewsOpen] = useState(false); 
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false); // <--- NEW STATE FOR LOGIN MODAL
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false); 
     
   const resultsTableRef = useRef<HTMLDivElement>(null);
 
@@ -410,7 +414,9 @@ export default function Home() {
   };
 
   const handleGlobalReset = () => {
-    setOpenGroup(null); setSelectedPositions([]); setSelectedStatKeys([]); setLevel("all"); setLeagueStatus("all");
+    setOpenGroup(null);
+    setOpenGeneralGroup(null);
+    setSelectedPositions([]); setSelectedStatKeys([]); setLevel("all"); setLeagueStatus("all");
     setSelectedTeams([...ALL_TEAMS]); setSearchQuery(""); setStatThresholds({}); setMinTools(0);
     setActivePlayerId(null); setDateRange("season_curr"); setCustomStart(""); setCustomEnd(""); setCompareList([]);
     setSortKey("rotoScore"); setSortDir("desc");
@@ -561,7 +567,7 @@ export default function Home() {
        RENDER FUNCTIONS
    ============================================================================= */
 
-  const renderFilterTray = () => {
+  const renderStatFilterTray = () => {
     if (!openGroup) return null;
     return (
       <div style={{ background: "#fafafa", borderBottom: "1px solid #ddd", borderTop: `2px solid ${COLORS.DARK_GREEN}`, padding: "20px", boxShadow: "inset 0 4px 12px rgba(0,0,0,0.05)", animation: "slideDownTray 0.2s ease-out" }}>
@@ -630,6 +636,93 @@ export default function Home() {
     );
   };
 
+  const renderGeneralFilterTray = () => {
+    if (!openGeneralGroup) return null;
+    return (
+        <div style={{ background: "#fafafa", borderBottom: "1px solid #ddd", borderTop: `2px solid ${COLORS.DARK_GREEN}`, padding: "20px", boxShadow: "inset 0 4px 12px rgba(0,0,0,0.05)", animation: "slideDownTray 0.2s ease-out" }}>
+           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <h4 style={{ margin: 0, fontSize: 12, fontWeight: 900, color: "#999", textTransform: "uppercase" }}>
+                    Select {openGeneralGroup === 'league' ? 'League & Level' : openGeneralGroup === 'position' ? 'Positions' : 'MLB Teams'}
+                </h4>
+                <button onClick={() => setOpenGeneralGroup(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#999", display: "flex", alignItems: "center", fontSize: "16px" }}>
+                    <Icons.X />
+                </button>
+            </div>
+
+            {/* LEAGUE AND LEVEL CONTENT */}
+            {openGeneralGroup === 'league' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div>
+                        <div style={{fontSize: 10, fontWeight: 800, color: '#ccc', marginBottom: 6, textTransform: 'uppercase'}}>League Status</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: 'wrap' }}>
+                            {[
+                                { key: "all", label: "All" },
+                                { key: "available", label: "Free Agents" },    
+                                { key: "my_team", label: "My Team" },                        
+                                { key: "rostered", label: "Rostered" }        
+                            ].map((opt) => { 
+                                const isLocked = !isUserPaid && opt.key !== "all"; 
+                                return (
+                                <button 
+                                    key={opt.key} 
+                                    onClick={() => !isLocked && setLeagueStatus(opt.key as LeagueStatus)} 
+                                    style={{ ...STYLES.btnBase, padding: "8px 14px", fontSize: 12, ...(leagueStatus === opt.key ? STYLES.btnSelected : null), opacity: isLocked ? 0.6 : 1, cursor: isLocked ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}
+                                >
+                                    {opt.label}{isLocked && <Icons.LockSmall />}
+                                </button>
+                                ); 
+                            })}
+                        </div>
+                    </div>
+                    <div>
+                        <div style={{fontSize: 10, fontWeight: 800, color: '#ccc', marginBottom: 6, textTransform: 'uppercase'}}>Level</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: 'wrap' }}>
+                            <button onClick={() => { setLevel("all"); }} style={{ ...STYLES.btnBase, padding: "8px 14px", fontSize: 12, ...(level === "all" ? STYLES.btnSelected : null) }}>All Levels</button>
+                            <button onClick={() => setLevel("mlb")} style={{ ...STYLES.btnBase, padding: "8px 14px", fontSize: 12, ...(level === "mlb" ? STYLES.btnSelected : null) }}>MLB</button>
+                            <button onClick={() => setLevel("rookies" as any)} style={{ ...STYLES.btnBase, padding: "8px 14px", fontSize: 12, ...(level === "rookies" as any ? STYLES.btnSelected : null) }}>Rookies</button>
+                            <button onClick={() => setLevel("prospects")} style={{ ...STYLES.btnBase, padding: "8px 14px", fontSize: 12, ...(level === "prospects" ? STYLES.btnSelected : null) }}>MiLB</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* POSITION CONTENT */}
+            {openGeneralGroup === 'position' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div>
+                        <div style={{fontSize: 10, fontWeight: 800, color: '#ccc', marginBottom: 6, textTransform: 'uppercase'}}>Group</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: 'wrap' }}>
+                            <button 
+                                onClick={() => setSelectedPositions([])} 
+                                style={{ ...STYLES.btnBase, padding: "8px 14px", fontSize: 12, ...(selectedPositions.length === 0 ? STYLES.btnSelected : null) }}
+                            >
+                                All Positions
+                            </button>
+                            <button onClick={() => setSelectedPositions([...BATTER_POSITIONS])} style={{ ...STYLES.btnBase, padding: "8px 14px", fontSize: 12, ...(BATTER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? STYLES.btnSelected : null) }}>Batters Only</button>
+                            <button onClick={() => setSelectedPositions([...PITCHER_POSITIONS])} style={{ ...STYLES.btnBase, padding: "8px 14px", fontSize: 12, ...(PITCHER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? STYLES.btnSelected : null) }}>Pitchers Only</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div style={{fontSize: 10, fontWeight: 800, color: '#ccc', marginBottom: 6, textTransform: 'uppercase'}}>Specific</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: 'wrap' }}>
+                             {ALL_POSITIONS.map(p => (
+                                <button key={p} onClick={() => setSelectedPositions(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])} style={{ ...STYLES.btnBase, width: 36, height: 36, padding: 0, borderRadius: "50%", fontSize: 11, ...(selectedPositions.includes(p) ? STYLES.btnSelected : null), flexShrink: 0 }}>{p}</button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* TEAM CONTENT */}
+            {openGeneralGroup === 'team' && (
+                <div>
+                     {renderTeamScrollRow()}
+                </div>
+            )}
+        </div>
+    );
+  };
+
   const renderTeamScrollRow = () => {
     const isAllSelected = ALL_TEAMS.every(t => selectedTeams.includes(t));
     const toggleAll = () => {
@@ -638,14 +731,13 @@ export default function Home() {
     };
     
     return (
-        <div className="hide-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, alignItems: "center", width: "100%" }}>
-            <div style={{ flexShrink: 0, fontSize: 10, fontWeight: 900, color: "#999", marginRight: 4 }}>TEAMS:</div>
-            <button onClick={toggleAll} style={{ flexShrink: 0, width: 28, height: 28, borderRadius: "50%", border: `2px solid ${isAllSelected ? COLORS.DARK_GREEN : "#ddd"}`, fontSize: 9, fontWeight: 900, background: isAllSelected ? COLORS.DARK_GREEN : "#fff", color: isAllSelected ? "#fff" : "#999", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>ALL</button>
+        <div className="hide-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, alignItems: "center", width: "100%", flexWrap: 'wrap' }}>
+            <button onClick={toggleAll} style={{ flexShrink: 0, width: 32, height: 32, borderRadius: "50%", border: `2px solid ${isAllSelected ? COLORS.DARK_GREEN : "#ddd"}`, fontSize: 10, fontWeight: 900, background: isAllSelected ? COLORS.DARK_GREEN : "#fff", color: isAllSelected ? "#fff" : "#999", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>ALL</button>
             <div style={{ width: 1, height: 20, background: "#eee", flexShrink: 0, margin: "0 4px" }} />
             {ALL_TEAMS.map(t => {
                 const isSel = selectedTeams.includes(t);
                 return (
-                    <button key={t} onClick={() => setSelectedTeams(prev => isSel ? prev.filter(x => x !== t) : [...prev, t])} style={{ flexShrink: 0, width: 28, height: 28, borderRadius: "50%", border: "2px solid " + TEAM_PRIMARY[t], fontSize: 9, fontWeight: 900, background: isSel ? TEAM_PRIMARY[t] : "#fff", color: isSel ? "#fff" : TEAM_PRIMARY[t], cursor: "pointer", transition: "all 0.1s" }}>
+                    <button key={t} onClick={() => setSelectedTeams(prev => isSel ? prev.filter(x => x !== t) : [...prev, t])} style={{ flexShrink: 0, width: 32, height: 32, borderRadius: "50%", border: "2px solid " + TEAM_PRIMARY[t], fontSize: 10, fontWeight: 900, background: isSel ? TEAM_PRIMARY[t] : "#fff", color: isSel ? "#fff" : TEAM_PRIMARY[t], cursor: "pointer", transition: "all 0.1s" }}>
                         {t}
                     </button>
                 );
@@ -730,7 +822,6 @@ export default function Home() {
   return (
     <div style={{ minHeight: "100vh", background: `radial-gradient(circle at center, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.85) 100%), url('/bg-grass.png')`, backgroundAttachment: "fixed", backgroundSize: "cover", display: "flex", flexDirection: "column", width: "100%" }}>
       <GlobalStyles />
-      <div className="beta-banner">BETA • v1.2 • Dec 2025</div>
       {renderCompareModal()}
       
       {/* TOP NAVIGATION */}
@@ -779,11 +870,11 @@ export default function Home() {
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1a1a1a'} 
                 style={{ position: 'relative', width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: '#1a1a1a', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'background 0.2s' }}
               >
-                 <Newspaper size={18} color="#888" />
-                 <span style={{ position: 'absolute', top: 4, right: 4, width: 8, height: 8 }}>
-                    <span style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', background: '#4caf50', opacity: 0.75, animation: 'ping 1s cubic-bezier(0, 0, 0.2, 1) infinite' }} className="animate-ping" />
-                    <span style={{ position: 'relative', display: 'inline-block', width: '100%', height: '100%', borderRadius: '50%', background: '#4caf50' }} />
-                 </span>
+                  <Newspaper size={18} color="#888" />
+                  <span style={{ position: 'absolute', top: 4, right: 4, width: 8, height: 8 }}>
+                     <span style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', background: '#4caf50', opacity: 0.75, animation: 'ping 1s cubic-bezier(0, 0, 0.2, 1) infinite' }} className="animate-ping" />
+                     <span style={{ position: 'relative', display: 'inline-block', width: '100%', height: '100%', borderRadius: '50%', background: '#4caf50' }} />
+                  </span>
               </button>
 
               <button onClick={() => setIsSyncModalOpen(true)} title="Sync League" onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4caf50'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#333'} style={{ width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: '#333', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.3)', flexShrink: 0, transition: 'background 0.2s' }}>
@@ -948,8 +1039,38 @@ export default function Home() {
             {/* --- FILTER CONTROL PANEL --- */}
             <div style={{ borderWidth: "1px", borderStyle: "solid", borderColor: "rgba(255,255,255,0.1)", borderRadius: 16, background: "rgba(255,255,255,0.98)", padding: 0, overflow: "visible", boxShadow: "0 10px 40px rgba(0,0,0,0.4)", display: "flex", flexDirection: "column", width: "100%" }}>
               
-              {/* --- 1. STAT CATEGORIES (Horizontal Scroll) --- */}
-              <div className="hide-scrollbar" style={{ padding: "16px 12px 0 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+              {/* --- 1. GENERAL FILTERS ROW (THE NEW 3 BUTTONS) - MOVED TO TOP --- */}
+              <div className="hide-scrollbar" style={{ padding: "16px 12px 10px 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGeneralGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+                   {/* BUTTON 1: League & Level */}
+                   <button 
+                        onClick={() => { setOpenGeneralGroup(openGeneralGroup === 'league' ? null : 'league'); setOpenGroup(null); }}
+                        style={{ ...STYLES.btnBase, display: 'flex', alignItems: 'center', gap: 6, borderRadius: 24, padding: "8px 14px", ...(openGeneralGroup === 'league' ? STYLES.btnSelected : {}) }}
+                   >
+                        <Globe size={14} /> League & Level {leagueStatus !== 'all' || level !== 'all' ? <span style={{width: 6, height: 6, borderRadius: '50%', background: openGeneralGroup === 'league' ? '#fff' : COLORS.DARK_GREEN}}></span> : null}
+                   </button>
+                   
+                   {/* BUTTON 2: Position */}
+                   <button 
+                        onClick={() => { setOpenGeneralGroup(openGeneralGroup === 'position' ? null : 'position'); setOpenGroup(null); }}
+                        style={{ ...STYLES.btnBase, display: 'flex', alignItems: 'center', gap: 6, borderRadius: 24, padding: "8px 14px", ...(openGeneralGroup === 'position' ? STYLES.btnSelected : {}) }}
+                   >
+                        <Users size={14} /> Position {selectedPositions.length > 0 ? <span style={{width: 6, height: 6, borderRadius: '50%', background: openGeneralGroup === 'position' ? '#fff' : COLORS.DARK_GREEN}}></span> : null}
+                   </button>
+                   
+                   {/* BUTTON 3: MLB Team */}
+                   <button 
+                        onClick={() => { setOpenGeneralGroup(openGeneralGroup === 'team' ? null : 'team'); setOpenGroup(null); }}
+                        style={{ ...STYLES.btnBase, display: 'flex', alignItems: 'center', gap: 6, borderRadius: 24, padding: "8px 14px", ...(openGeneralGroup === 'team' ? STYLES.btnSelected : {}) }}
+                   >
+                        <Flag size={14} /> MLB Team {selectedTeams.length < ALL_TEAMS.length ? <span style={{width: 6, height: 6, borderRadius: '50%', background: openGeneralGroup === 'team' ? '#fff' : COLORS.DARK_GREEN}}></span> : null}
+                   </button>
+              </div>
+
+              {/* TRAY FOR GENERAL FILTERS - RENDERED IMMEDIATELY AFTER ITS ROW */}
+              {openGeneralGroup && renderGeneralFilterTray()}
+
+              {/* --- 2. STAT CATEGORIES (Horizontal Scroll) - MOVED DOWN --- */}
+              <div className="hide-scrollbar" style={{ padding: "10px 12px 16px 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9" }}>
                   {CUSTOM_TAB_ORDER.map((coreId) => {
                   const isOpen = openGroup === coreId;
                   const activeCount = CORE_STATS[coreId]?.filter(k => selectedStatKeys.includes(k)).length || 0;
@@ -961,9 +1082,9 @@ export default function Home() {
                   let currentStyle = isOpen ? isActiveStyle : (activeCount > 0 ? hasFilterStyle : defaultStyle);
 
                   return (
-                      <div key={coreId} style={{ position: "relative", paddingBottom: 12, flexShrink: 0 }}>
+                      <div key={coreId} style={{ position: "relative", paddingBottom: 0, flexShrink: 0 }}>
                       <button 
-                          onClick={() => setOpenGroup(isOpen ? null : coreId as CoreId)}
+                          onClick={() => { setOpenGroup(isOpen ? null : coreId as CoreId); setOpenGeneralGroup(null); }}
                           style={{
                           ...STYLES.btnBase, ...currentStyle,
                           padding: "8px 14px", borderRadius: "24px", fontSize: "12px", fontWeight: (isOpen || activeCount > 0) ? 800 : 600,
@@ -986,87 +1107,31 @@ export default function Home() {
                   })}
               </div>
 
-              {/* --- 1.5 THE FILTER TRAY --- */}
-              {renderFilterTray()}
+              {/* TRAY FOR STATS - RENDERED IMMEDIATELY AFTER ITS ROW */}
+              {openGroup && renderStatFilterTray()}
 
-              {/* --- 2. COMPACT SUPER ROW (Split into 2 Rows) --- */}
-              <div style={{ background: "#fff", borderBottom: "1px solid #eee" }}>
-                  
-                  {/* ROW 1: SCOPE & LEVELS */}
-                  <div className="hide-scrollbar" style={{ display: "flex", gap: 10, padding: "12px 20px 6px 20px", overflowX: "auto", alignItems: "center" }}>
-                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                          {[
-                            { key: "all", label: "All" },
-                            { key: "available", label: "FA" },    
-                            { key: "my_team", label: "My Team" },                      
-                            { key: "rostered", label: "Rostered" }        
-                          ].map((opt) => { 
-                            const isLocked = !isUserPaid && opt.key !== "all"; 
-                            return (
-                              <button 
-                                key={opt.key} 
-                                onClick={() => !isLocked && setLeagueStatus(opt.key as LeagueStatus)} 
-                                style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(leagueStatus === opt.key ? STYLES.btnSelected : null), opacity: isLocked ? 0.6 : 1, cursor: isLocked ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}
-                              >
-                                {opt.label}{isLocked && <Icons.LockSmall />}
-                              </button>
-                            ); 
-                          })}
-                      </div>
-                      <div style={{ width: 1, height: 20, background: "#eee", flexShrink: 0 }} />
-                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                          <button onClick={() => { setLevel("all"); setSelectedPositions([]); }} style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(level === "all" && selectedPositions.length === 0 ? STYLES.btnSelected : null) }}>All</button>
-                          <button onClick={() => setLevel("mlb")} style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(level === "mlb" ? STYLES.btnSelected : null) }}>MLB</button>
-                          <button onClick={() => setLevel("rookies" as any)} style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(level === "rookies" as any ? STYLES.btnSelected : null) }}>Rookies</button>
-                          <button onClick={() => setLevel("prospects")} style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(level === "prospects" ? STYLES.btnSelected : null) }}>MiLB</button>
-                      </div>
-                  </div>
-
-                  {/* ROW 2: TYPES & POSITIONS */}
-                  <div className="hide-scrollbar" style={{ display: "flex", gap: 10, padding: "0 20px 12px 20px", overflowX: "auto", alignItems: "center" }}>
-                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                          <button 
-                            onClick={() => setSelectedPositions([])} 
-                            style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(selectedPositions.length === 0 ? STYLES.btnSelected : null) }}
-                          >
-                            All
-                          </button>
-                          <button onClick={() => setSelectedPositions([...BATTER_POSITIONS])} style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(BATTER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? STYLES.btnSelected : null) }}>Batters</button>
-                          <button onClick={() => setSelectedPositions([...PITCHER_POSITIONS])} style={{ ...STYLES.btnBase, padding: "6px 10px", fontSize: 11, ...(PITCHER_POSITIONS.every(p => selectedPositions.includes(p)) && selectedPositions.length > 0 ? STYLES.btnSelected : null) }}>Pitchers</button>
-                      </div>
-                      <div style={{ width: 1, height: 20, background: "#eee", flexShrink: 0 }} />
-                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                          {ALL_POSITIONS.map(p => (
-                            <button key={p} onClick={() => setSelectedPositions(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])} style={{ ...STYLES.btnBase, width: 28, height: 28, padding: 0, borderRadius: "50%", fontSize: 10, ...(selectedPositions.includes(p) ? STYLES.btnSelected : null), flexShrink: 0 }}>{p}</button>
-                          ))}
-                      </div>
-                  </div>
-              </div>
-
-              {/* --- 3. TEAMS ROW (Alphabetical) --- */}
-              <div style={{ padding: "8px 20px", background: "#fff", borderBottom: "1px solid #eee" }}>
-                 {renderTeamScrollRow()}
-              </div>
-
-              {/* --- RESULTS BAR --- */}
-              <div ref={resultsTableRef} style={{ padding: "12px 20px", background: "#fcfcfc", borderBottom: "2px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+              {/* --- 4. RESULTS BAR (SCROLLABLE ROW) --- */}
+              <div ref={resultsTableRef} className="hide-scrollbar" style={{ padding: "12px 20px", background: "#fcfcfc", borderBottom: "2px solid #eee", display: "flex", alignItems: "center", gap: 12, overflowX: 'auto', whiteSpace: 'nowrap' }}>
                 
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ fontWeight: 900, fontSize: 18 }}>Results</span>
-                  {loading ? <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#666" }}><Icons.Spinner /> Scouting...</span> : <span style={{ fontSize: 11, fontWeight: 800, color: COLORS.DARK_GREEN, background: "#e8f5e9", padding: "4px 10px", borderRadius: 20 }}>{filteredPlayers.length} Found</span>}
-                  
-                  <button onClick={handleGlobalReset} style={{...STYLES.btnBase, fontSize: 10, padding: "4px 10px", background: "#fdecea", color: "#721c24", borderColor: "#f5c6cb"}}>Reset</button>
-                  <button onClick={saveCurrentFilter} title="Save current filter" style={{...STYLES.btnBase, fontSize: 10, padding: "4px 10px", background: "#e3f2fd", color: "#0d47a1", borderColor: "#90caf9", display: "flex", alignItems: "center", gap: 4}}><Icons.Save /> Save</button>
-
-                  {compareList.length > 0 && (
-                    <button onClick={() => setIsCompareOpen(true)} style={{ background: "#1b5e20", color: "#fff", border: "none", borderRadius: 20, padding: "6px 14px", fontWeight: 800, fontSize: 11, display: "flex", alignItems: "center", gap: 4, cursor: "pointer", animation: "slideDown 0.2s" }}>COMPARE ({compareList.length})</button>
+                  {/* Results Count */}
+                  {loading ? (
+                    <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#666", flexShrink: 0 }}>
+                        <Icons.Spinner /> Scouting...
+                    </span> 
+                  ) : (
+                    <span style={{ fontSize: 11, fontWeight: 800, color: COLORS.DARK_GREEN, background: "#e8f5e9", padding: "6px 12px", borderRadius: 20, flexShrink: 0 }}>
+                        {filteredPlayers.length} Found
+                    </span>
                   )}
-                </div>
+                  
+                  {/* Reset & Save */}
+                  <button onClick={handleGlobalReset} style={{...STYLES.btnBase, fontSize: 10, padding: "6px 12px", background: "#fdecea", color: "#721c24", borderColor: "#f5c6cb", flexShrink: 0}}>Reset</button>
+                  <button onClick={saveCurrentFilter} title="Save current filter" style={{...STYLES.btnBase, fontSize: 10, padding: "6px 12px", background: "#e3f2fd", color: "#0d47a1", borderColor: "#90caf9", display: "flex", alignItems: "center", gap: 4, flexShrink: 0}}><Icons.Save /> Save</button>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: "auto", overflowX: "auto", flexWrap: "nowrap" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", padding: "4px 8px", borderRadius: "8px", border: "1px solid #eee", whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {/* Range Selector */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", padding: "4px 8px", borderRadius: "8px", border: "1px solid #eee", flexShrink: 0 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: "#999", textTransform: "uppercase", marginRight: 2 }}>📅 Range:</span>
-                    <select value={dateRange} onChange={(e) => setDateRange(e.target.value as DateRangeOption)} style={{ ...STYLES.btnBase, padding: "4px 8px", fontSize: 11, height: "28px", borderRadius: "6px" }}>
+                    <select value={dateRange} onChange={(e) => setDateRange(e.target.value as DateRangeOption)} style={{ ...STYLES.btnBase, padding: "4px 8px", fontSize: 11, height: "28px", borderRadius: "6px", border: 'none', background: 'transparent' }}>
                       <option value="season_curr">Current Season</option>
                       <option value="pace_season">Projected Full Season</option>
                       <option value="season_last">Last Season</option>
@@ -1075,19 +1140,20 @@ export default function Home() {
                       <option value="last_90">Last 90 Days</option>
                       <option value="custom">Custom...</option>
                     </select>
-                    {dateRange === "custom" && (
-                      <>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4, animation: "fadeIn 0.2s" }}>
+                  </div>
+                  
+                  {/* Custom Date Inputs (Conditional) */}
+                  {dateRange === "custom" && (
+                     <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, animation: "fadeIn 0.2s" }}>
                           <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} style={{ ...STYLES.btnBase, padding: "3px 6px", fontSize: 11, width: "110px" }} />
                           <span style={{ color: "#aaa", fontSize: 10 }}>to</span>
                           <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} style={{ ...STYLES.btnBase, padding: "3px 6px", fontSize: 11, width: "110px" }} />
-                        </div>
-                        <button onClick={applyCustomDates} style={{ ...STYLES.btnBase, background: COLORS.DARK_GREEN, color: "#fff", border: "none", fontSize: 10, padding: "4px 8px", height: 26, fontWeight: 700 }}>Apply</button>
-                      </>
-                    )}
-                  </div>
-                  <input type="text" placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ padding: "8px 16px", borderRadius: 20, border: "1px solid #ddd", fontSize: 13, outline: "none", width: "clamp(120px, 20vw, 200px)", flexShrink: 1 }} />
-                </div>
+                          <button onClick={applyCustomDates} style={{ ...STYLES.btnBase, background: COLORS.DARK_GREEN, color: "#fff", border: "none", fontSize: 10, padding: "4px 8px", height: 26, fontWeight: 700 }}>Apply</button>
+                     </div>
+                  )}
+
+                  {/* Search Bar */}
+                  <input type="text" placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ padding: "8px 16px", borderRadius: 20, border: "1px solid #ddd", fontSize: 13, outline: "none", width: "160px", flexShrink: 0 }} />
               </div>
 
               {/* LEGEND */}
