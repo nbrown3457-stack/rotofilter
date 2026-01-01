@@ -158,13 +158,15 @@ const calculatePace = (val: number, gamesPlayed: number) => {
   return (val / Math.max(gamesPlayed, 1)) * 162;
 };
 
+// UPDATED: Lighter, more subtle background colors
 const getHeatmapColor = (value: number, min: number, max: number, lowIsGood = false) => {
   if (value === 0) return 'transparent';
   let pct = (value - min) / (max - min);
   if (pct < 0) pct = 0; if (pct > 1) pct = 1;
   if (lowIsGood) pct = 1 - pct;
   const hue = pct * 120; // 0=Red, 120=Green
-  return `hsla(${hue}, 70%, 40%, 0.2)`;
+  // CHANGED: Opacity lowered to 0.15 for better readability of white text
+  return `hsla(${hue}, 70%, 45%, 0.15)`;
 };
 
 const checkOffSeason = () => {
@@ -455,7 +457,7 @@ export default function RosterDNA() {
             </div>
           </div>
 
-          {/* TEAM TOTALS ROW */}
+          {/* TEAM TOTALS ROW - KEPT FOR TOP VISIBILITY AS WELL */}
           <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: "16px", border: "1px solid #333", display: "flex", alignItems: "center", gap: 20, overflowX: "auto" }} className="hide-scrollbar">
              <div style={{ minWidth: 80, fontWeight: 900, color: "#fff", fontSize: 12 }}>
                PROJECTED<br/>FINISH
@@ -491,8 +493,6 @@ export default function RosterDNA() {
                   {(view === 'batters' ? BATTER_COLS : PITCHER_COLS).map(col => (
                     <th key={col.key} style={{ textAlign: "center", padding: "12px", minWidth: 60, fontSize: 11, color: "#888" }}>{col.label}</th>
                   ))}
-                  {/* NEW TARGET COLUMN */}
-                  <th style={{ textAlign: "center", padding: "12px", minWidth: 100, fontSize: 11, color: COLORS.GOLD }}>NEED / PACE</th>
                 </tr>
               </thead>
               <tbody>
@@ -523,21 +523,12 @@ export default function RosterDNA() {
                              </td>
                            );
                         })}
-                        {/* NEED CALCULATION COLUMN */}
-                        <td style={{ textAlign: "center", padding: 10, color: '#888', fontSize: 11 }}>
-                            {/* Simple logic: Compare player avg to league need avg */}
-                            <span style={{color: COLORS.GOLD, fontWeight: 700}}>
-                                {view === 'batters' 
-                                    ? (p.computed['hr'] > 25 ? '+PWR' : (p.computed['sb'] > 15 ? '+SPD' : 'AVG'))
-                                    : (p.computed['era'] < 3.5 ? '+ACE' : 'Stream')}
-                            </span>
-                        </td>
                     </tr>
                     
                     {/* EXPANDED "SMART SWAP" ROW */}
                     {isExpanded && (
                         <tr style={{ background: '#222', borderBottom: "1px solid #333" }}>
-                            <td colSpan={(view === 'batters' ? BATTER_COLS : PITCHER_COLS).length + 2} style={{ padding: 0 }}>
+                            <td colSpan={(view === 'batters' ? BATTER_COLS : PITCHER_COLS).length + 1} style={{ padding: 0 }}>
                                 <div className="expanded-content" style={{ padding: "12px 16px" }}>
                                     {/* Intelligence Logic */}
                                     {(() => {
@@ -571,6 +562,54 @@ export default function RosterDNA() {
                   );
                 })}
               </tbody>
+              
+              {/* --- SUMMARY FOOTER WITH NEEDS/PACE --- */}
+              <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 30, boxShadow: '0 -2px 10px rgba(0,0,0,0.5)' }}>
+                  {/* ROW 1: PACE */}
+                  <tr style={{ background: '#222' }}>
+                      <td style={{ padding: '12px 16px', color: '#fff', fontSize: 11, fontWeight: 800, borderTop: '2px solid #333' }}>TEAM PACE</td>
+                      {(view === 'batters' ? BATTER_COLS : PITCHER_COLS).map(col => {
+                          const val = totals[col.key] || 0;
+                          return (
+                              <td key={col.key} style={{ textAlign: 'center', padding: 10, color: '#fff', fontWeight: 900, fontSize: 13, borderTop: '2px solid #333' }}>
+                                  {col.type === 'ratio' ? val.toFixed(2) : Math.round(val)}
+                              </td>
+                          )
+                      })}
+                  </tr>
+                  
+                  {/* ROW 2: TARGET */}
+                  <tr style={{ background: '#1a1a1a' }}>
+                      <td style={{ padding: '12px 16px', color: '#888', fontSize: 11, fontWeight: 700 }}>LEAGUE TARGET</td>
+                      {(view === 'batters' ? BATTER_COLS : PITCHER_COLS).map(col => (
+                          <td key={col.key} style={{ textAlign: 'center', padding: 10, color: '#888', fontWeight: 600, fontSize: 12 }}>
+                              {col.baseTarget}
+                          </td>
+                      ))}
+                  </tr>
+
+                  {/* ROW 3: DIFF (+/-) */}
+                  <tr style={{ background: '#111', borderBottom: '1px solid #333' }}>
+                      <td style={{ padding: '12px 16px', color: '#fff', fontSize: 11, fontWeight: 800 }}>DIFF (+/-)</td>
+                      {(view === 'batters' ? BATTER_COLS : PITCHER_COLS).map(col => {
+                          const val = totals[col.key] || 0;
+                          const target = col.baseTarget || 0;
+                          const diff = val - target;
+                          const isPositive = col.lowIsGood ? diff < 0 : diff > 0;
+                          
+                          // Format string (e.g. +12 or -5)
+                          const diffStr = col.type === 'ratio' 
+                             ? (diff > 0 ? '+' : '') + diff.toFixed(2)
+                             : (diff > 0 ? '+' : '') + Math.round(diff);
+
+                          return (
+                              <td key={col.key} style={{ textAlign: 'center', padding: 10, color: isPositive ? COLORS.GREEN : COLORS.RED, fontWeight: 900, fontSize: 13 }}>
+                                  {diffStr}
+                              </td>
+                          )
+                      })}
+                  </tr>
+              </tfoot>
             </table>
           </div>
         )}
