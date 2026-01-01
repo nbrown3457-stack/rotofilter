@@ -11,13 +11,19 @@ import {
   Info, 
   Trophy, 
   AlertTriangle, 
-  TrendingUp,
-  ArrowRight // <--- Fixed: Added this import
+  TrendingUp, 
+  ArrowRight,
+  Settings,
+  Users,
+  Eye,
+  RefreshCw,
+  X // <--- Added X explicitly
 } from "lucide-react";
 
 /* --- 1. CONFIGURATION & TYPES --- */
 
-// Fixed: Added COLORS constant back
+type LeagueType = 'roto' | 'points' | 'dynasty';
+
 const COLORS = {
   GREEN: "rgba(76, 175, 80, 1)",
   RED: "rgba(244, 67, 54, 1)",
@@ -35,7 +41,7 @@ interface StatCol {
   target?: number; 
 }
 
-// Targets based on standard 12-team 5x5 roto targets (approximate)
+// 12-Team Roto Targets (Baseline)
 const BATTER_COLS: StatCol[] = [
   { key: 'r', label: 'R', type: 'count', target: 1000 },
   { key: 'hr', label: 'HR', type: 'count', target: 280 },
@@ -65,16 +71,26 @@ const GlobalStyles = () => (
       100% { box-shadow: inset 0 0 0 0px rgba(255, 215, 0, 0); }
     }
     .carry-alert { animation: throb-gold 2s infinite; font-weight: 800 !important; }
-    .stat-cell { transition: all 0.2s; position: relative; }
-    .sticky-header th { position: sticky; top: 0; z-index: 20; background: #f5f5f5; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
     
-    /* Custom Scrollbar for horizontal scrolling */
-    .hide-scrollbar::-webkit-scrollbar { display: none; }
-    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    /* HORIZONTAL SCROLL FIXES */
+    .sticky-container { 
+        overflow-x: auto; 
+        max-width: 100vw;
+        -webkit-overflow-scrolling: touch;
+    }
+    .sticky-table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        white-space: nowrap; /* Forces content to stay on one line */
+    }
+    .sticky-header th { position: sticky; top: 0; z-index: 20; background: #f5f5f5; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
     
     .dna-toggle { padding: 6px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; cursor: pointer; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #888; transition: all 0.2s; }
     .dna-toggle.active { background: #4caf50; color: white; border-color: #4caf50; }
     
+    .league-type-btn { padding: 4px 8px; font-size: 10px; border-radius: 4px; border: 1px solid #333; background: #222; color: #666; cursor: pointer; }
+    .league-type-btn.active { background: #4caf50; color: white; border-color: #4caf50; }
+
     .team-name-font { font-family: "Permanent Marker", cursive; letter-spacing: 1px; }
     .dna-font { font-family: "Orbitron", sans-serif; }
     
@@ -83,6 +99,9 @@ const GlobalStyles = () => (
     .grade-B { color: #8bc34a; border-color: #8bc34a; background: rgba(139, 195, 74, 0.1); }
     .grade-C { color: #ff9800; border-color: #ff9800; background: rgba(255, 152, 0, 0.1); }
     .grade-D { color: #f44336; border-color: #f44336; background: rgba(244, 67, 54, 0.1); }
+    
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .modal-card { background: #222; padding: 24px; border-radius: 16px; width: 100%; max-width: 500px; border: 1px solid #444; max-height: 80vh; overflow-y: auto; }
     
     @media (max-width: 768px) {
         .desktop-legend { display: none; }
@@ -119,29 +138,45 @@ const checkOffSeason = () => {
 };
 
 // "AI" Logic for Summary
-const generateAnalysis = (totals: Record<string, number>, view: 'batters' | 'pitchers') => {
+const generateAnalysis = (totals: Record<string, number>, view: 'batters' | 'pitchers', leagueType: LeagueType, rosterSize: number) => {
     const strengths: string[] = [];
     const weaknesses: string[] = [];
+    const tips: string[] = [];
     let scoreTotal = 0;
     let categoryCount = 0;
 
     const cols = view === 'batters' ? BATTER_COLS : PITCHER_COLS;
 
+    // 1. Calculate Grade based on Targets
     cols.forEach(col => {
-        const val = totals[col.key] || 0;
+        let val = totals[col.key] || 0;
         const target = col.target || 1;
         
-        // Simple ratio: 1.0 = Hit Target
         let ratio = val / target;
-        if (col.lowIsGood) ratio = target / (val || 0.001); // Invert for ERA
+        if (col.lowIsGood) ratio = target / (val || 0.001);
 
         if (ratio >= 1.05) strengths.push(col.label);
         else if (ratio < 0.85) weaknesses.push(col.label);
         
-        scoreTotal += Math.min(ratio, 1.2); // Cap bonus credit
+        scoreTotal += Math.min(ratio, 1.2);
         categoryCount++;
     });
 
+    // 2. League Type Specific Logic
+    if (leagueType === 'dynasty') {
+        if (rosterSize > 35) tips.push("Deep roster detected. Consider consolidating 2 prospects for 1 proven star.");
+        if (totals['so'] < 1000 && view === 'pitchers') tips.push("Low K totals. In Dynasty, prioritize high-K% arms for long-term value.");
+    } 
+    else if (leagueType === 'roto') {
+        if (strengths.includes('HR') && weaknesses.includes('SB')) tips.push("Imbalanced Offense. Trade surplus Power for Speed.");
+        if (totals['sv'] < 30 && view === 'pitchers') tips.push("Punting Saves? If not, aggressive waiver wire adds needed.");
+    }
+    else if (leagueType === 'points') {
+        if (view === 'batters' && totals['so'] > 1000) tips.push("High Strikeout Rate. In Points leagues, -1 for K's kills value.");
+        tips.push("Volume is King. Maximize Games Played above all else.");
+    }
+
+    // 3. Final Grade Calculation
     const gradeScore = scoreTotal / categoryCount;
     let grade = 'C';
     let gradeClass = 'grade-C';
@@ -152,7 +187,7 @@ const generateAnalysis = (totals: Record<string, number>, view: 'batters' | 'pit
     else if (gradeScore > 0.7) { grade = 'C'; gradeClass = 'grade-C'; }
     else { grade = 'D'; gradeClass = 'grade-D'; }
 
-    return { grade, gradeClass, strengths, weaknesses };
+    return { grade, gradeClass, strengths, weaknesses, tips };
 };
 
 /* =============================================================================
@@ -160,23 +195,30 @@ const generateAnalysis = (totals: Record<string, number>, view: 'batters' | 'pit
 ============================================================================= */
 export default function RosterDNA() {
   const supabase = createClient();
-  const { activeTeam } = useTeam();
+  const { activeTeam, setActiveTeam } = useTeam();
   
   const [players, setPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOffSeason, setIsOffSeason] = useState(false);
   const [mode, setMode] = useState<'totals' | 'pace'>('totals'); 
   const [view, setView] = useState<'batters' | 'pitchers'>('batters');
-  const [showLeaguePulse, setShowLeaguePulse] = useState(false); // For modal
+  
+  // League State
+  const [leagueType, setLeagueType] = useState<LeagueType>('roto');
+  const [showLeaguePulse, setShowLeaguePulse] = useState(false);
+  const [showRules, setShowRules] = useState(false);
+  const [rivalTeams, setRivalTeams] = useState<any[]>([]);
+  const [viewingTeamName, setViewingTeamName] = useState<string>("");
 
   // --- INITIALIZATION ---
   useEffect(() => {
       const _isOff = checkOffSeason();
       setIsOffSeason(_isOff);
-      if (_isOff) setMode('pace'); // Default to Pace in winter
-  }, []);
+      if (_isOff) setMode('pace');
+      if (activeTeam) setViewingTeamName((activeTeam as any).name || "My Team");
+  }, [activeTeam]);
 
-  // --- DATA FETCHING ---
+  // --- DATA FETCHING (My Team & Rivals) ---
   useEffect(() => {
     const fetchData = async () => {
       if (!activeTeam) return;
@@ -187,16 +229,27 @@ export default function RosterDNA() {
       params.append('team_id', activeTeam.team_key);
       
       try {
+        // 1. Fetch Players (For current team being viewed)
         const response = await fetch(`/api/players?${params.toString()}`);
         const data = await response.json();
         const roster = Array.isArray(data) ? data : data.players;
         
+        // Filter for specific team (My Team OR Rival if viewing them)
         const myRoster = roster.filter((p: any) => 
-            p.availability === 'MY_TEAM' || 
-            (p.team_id && String(p.team_id) === String((activeTeam as any).team_key))
+            (p.team_id && String(p.team_id) === String(activeTeam.team_key)) ||
+            (p.availability === 'MY_TEAM' && !(activeTeam as any).is_rival_view) // Fixed TypeScript error here
         );
-
         setPlayers(myRoster);
+
+        // 2. Fetch Rivals (Mocked here, but implies we pull distinct team_ids from DB)
+        if (rivalTeams.length === 0) {
+             setRivalTeams([
+                 { name: "The Bronx Bombers", team_key: "team_1", score: "A-" },
+                 { name: "ShoTime 99", team_key: "team_2", score: "B+" },
+                 { name: "Acuna Matata", team_key: "team_3", score: "C" },
+             ]);
+        }
+
       } catch (e) {
         console.error("Failed to load roster", e);
       } finally {
@@ -280,7 +333,7 @@ export default function RosterDNA() {
   }, [players, mode, view]);
 
   // --- REPORT GENERATION ---
-  const report = useMemo(() => generateAnalysis(totals, view), [totals, view]);
+  const report = useMemo(() => generateAnalysis(totals, view, leagueType, players.length), [totals, view, leagueType, players.length]);
 
 
   return (
@@ -291,7 +344,7 @@ export default function RosterDNA() {
       <div style={{ background: "linear-gradient(180deg, #1a1a1a 0%, #000 100%)", padding: "20px 16px", borderBottom: "1px solid #333" }}>
         <div className="wide-container">
           
-          {/* USER TEAM NAME & DNA TITLE */}
+          {/* USER TEAM NAME & CONTEXT */}
           <div style={{ marginBottom: 20 }}>
              {activeTeam && (
                  <div style={{ color: COLORS.GOLD, fontSize: 16, marginBottom: 4 }} className="team-name-font">
@@ -316,7 +369,7 @@ export default function RosterDNA() {
           <div style={{ background: "#222", borderRadius: 12, padding: 16, marginBottom: 16, display: 'flex', gap: 16, alignItems: 'center', border: '1px solid #333' }}>
               <div style={{ textAlign: 'center' }}>
                   <div className={`grade-badge ${report.gradeClass}`}>{report.grade}</div>
-                  <div style={{ fontSize: 9, color: '#888', marginTop: 4 }}>TEAM GRADE</div>
+                  <div style={{ fontSize: 9, color: '#888', marginTop: 4 }}>DNA GRADE</div>
               </div>
               <div style={{ flex: 1 }}>
                   {report.strengths.length > 0 && (
@@ -324,12 +377,16 @@ export default function RosterDNA() {
                           <TrendingUp size={14} /> <span style={{ fontWeight: 700 }}>Strong:</span> {report.strengths.join(", ")}
                       </div>
                   )}
-                  {report.weaknesses.length > 0 ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#ef9a9a' }}>
+                  {report.weaknesses.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#ef9a9a', marginBottom: 4 }}>
                           <AlertTriangle size={14} /> <span style={{ fontWeight: 700 }}>Weak:</span> {report.weaknesses.join(", ")}
                       </div>
-                  ) : (
-                      <div style={{ fontSize: 12, color: '#888', fontStyle: 'italic' }}>No major weaknesses detected.</div>
+                  )}
+                  {/* AI TIP */}
+                  {report.tips.length > 0 && (
+                      <div style={{ fontSize: 11, color: '#aaa', fontStyle: 'italic', marginTop: 4 }}>
+                         💡 AI: "{report.tips[0]}"
+                      </div>
                   )}
               </div>
           </div>
@@ -346,7 +403,7 @@ export default function RosterDNA() {
           </div>
 
           {/* TEAM TOTALS ROW */}
-          <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: "16px", border: "1px solid #333", display: "flex", alignItems: "center", gap: 20, overflowX: "auto" }}>
+          <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: "16px", border: "1px solid #333", display: "flex", alignItems: "center", gap: 20, overflowX: "auto" }} className="hide-scrollbar">
              <div style={{ minWidth: 80, fontWeight: 900, color: "#fff", fontSize: 12 }}>
                 PROJECTED<br/>FINISH
              </div>
@@ -365,9 +422,9 @@ export default function RosterDNA() {
       {/* LEGEND SECTION */}
       <div className="wide-container" style={{ padding: "12px 0", borderBottom: '1px solid #333' }}>
          <div style={{ display: 'flex', gap: 16, alignItems: 'center', overflowX: 'auto', fontSize: 10, color: '#888' }} className="hide-scrollbar">
-             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 10, height: 10, background: 'rgba(76, 175, 80, 0.4)', borderRadius: 2 }}></div> Strong Contribution</div>
-             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 10, height: 10, background: 'rgba(244, 67, 54, 0.2)', borderRadius: 2 }}></div> Weak / Negative</div>
-             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 10, height: 10, borderRadius: 2, border: '2px solid #FFD700' }}></div> "Carry" (Risk)</div>
+             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 10, height: 10, background: 'rgba(76, 175, 80, 0.4)', borderRadius: 2 }}></div> Strong</div>
+             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 10, height: 10, background: 'rgba(244, 67, 54, 0.2)', borderRadius: 2 }}></div> Weak</div>
+             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 10, height: 10, borderRadius: 2, border: '2px solid #FFD700', animation: 'throb-gold 2s infinite' }}></div> "Carry" (Risk)</div>
          </div>
       </div>
 
@@ -425,19 +482,87 @@ export default function RosterDNA() {
         )}
       </div>
 
-      {/* LEAGUE PULSE PLACEHOLDER MODAL */}
+      {/* LEAGUE PULSE MODAL */}
       {showLeaguePulse && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-              <div style={{ background: '#222', padding: 30, borderRadius: 16, maxWidth: 400, width: '100%', textAlign: 'center', border: '1px solid #444' }}>
-                  <Trophy size={48} color="#FFD700" style={{ marginBottom: 20 }} />
-                  <h2 style={{ color: '#fff', margin: '0 0 10px 0' }}>League Pulse</h2>
-                  <p style={{ color: '#888', fontSize: 14, lineHeight: 1.5 }}>
-                      Full league analysis requires fetching all rosters. <br/><br/>
-                      <strong>Coming in v1.3:</strong> Compare your DNA against every other team in your league to spot category deficits in real-time.
+          <div className="modal-overlay">
+              <div className="modal-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                     <h2 style={{ color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <Trophy size={24} color="#FFD700" /> League Pulse
+                     </h2>
+                     <button onClick={() => setShowLeaguePulse(false)} style={{ background: 'none', border: 'none', color: '#666' }}><X /></button>
+                  </div>
+
+                  <p style={{ color: '#888', fontSize: 12, marginBottom: 20 }}>
+                      Select a rival team to view their Roster DNA and spy on their strengths/weaknesses.
                   </p>
-                  <button onClick={() => setShowLeaguePulse(false)} style={{ marginTop: 20, padding: "10px 24px", background: "#4caf50", color: "white", border: "none", borderRadius: 24, fontWeight: 700, cursor: 'pointer' }}>
-                      Got it
-                  </button>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {/* Your Team (Top) */}
+                      <button 
+                         onClick={() => { setViewingTeamName((activeTeam as any).name); setShowLeaguePulse(false); }}
+                         style={{ background: '#333', border: '1px solid #4caf50', padding: 16, borderRadius: 8, textAlign: 'left', color: 'white', display: 'flex', justifyContent: 'space-between' }}
+                      >
+                         <span style={{ fontWeight: 700 }}>{(activeTeam as any).name} (Me)</span>
+                         <span style={{ fontSize: 12, color: '#4caf50' }}>Active</span>
+                      </button>
+
+                      {/* Rivals Loop */}
+                      {rivalTeams.map((t) => (
+                         <button 
+                            key={t.team_key}
+                            onClick={() => { 
+                                // In real app: setActiveTeam(t) to trigger fetch, but for now we simulate viewing name
+                                setViewingTeamName(t.name); 
+                                setShowLeaguePulse(false); 
+                            }}
+                            style={{ background: '#2a2a2a', border: '1px solid #444', padding: 16, borderRadius: 8, textAlign: 'left', color: '#ccc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                         >
+                            <span>{t.name}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontSize: 10, background: '#444', padding: '2px 6px', borderRadius: 4 }}>{t.score}</span>
+                                <ArrowRight size={14} color="#666" />
+                            </div>
+                         </button>
+                      ))}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* RULES MODAL */}
+      {showRules && (
+          <div className="modal-overlay">
+              <div className="modal-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                     <h2 style={{ color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <Settings size={24} color="#fff" /> League Rules
+                     </h2>
+                     <button onClick={() => setShowRules(false)} style={{ background: 'none', border: 'none', color: '#666' }}><X /></button>
+                  </div>
+                  
+                  <div style={{ marginBottom: 20 }}>
+                      <h4 style={{ color: '#aaa', fontSize: 12, textTransform: 'uppercase', marginBottom: 10 }}>Roster Positions</h4>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {['C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF', 'Util', 'SP', 'SP', 'RP', 'RP', 'P', 'P'].map((pos, i) => (
+                              <span key={i} style={{ background: '#333', padding: '4px 8px', borderRadius: 4, color: '#fff', fontSize: 11, fontWeight: 700 }}>{pos}</span>
+                          ))}
+                      </div>
+                  </div>
+
+                  <div>
+                      <h4 style={{ color: '#aaa', fontSize: 12, textTransform: 'uppercase', marginBottom: 10 }}>Scoring Categories</h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                          <div style={{ background: '#2a2a2a', padding: 10, borderRadius: 8 }}>
+                              <div style={{ color: '#4caf50', fontWeight: 900, marginBottom: 4 }}>BATTERS</div>
+                              <div style={{ fontSize: 11, color: '#ccc' }}>R, HR, RBI, SB, AVG, OPS</div>
+                          </div>
+                          <div style={{ background: '#2a2a2a', padding: 10, borderRadius: 8 }}>
+                              <div style={{ color: '#2196f3', fontWeight: 900, marginBottom: 4 }}>PITCHERS</div>
+                              <div style={{ fontSize: 11, color: '#ccc' }}>W, SV, K, ERA, WHIP</div>
+                          </div>
+                      </div>
+                  </div>
               </div>
           </div>
       )}
