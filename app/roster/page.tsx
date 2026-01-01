@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/app/utils/supabase/client";
 import { useTeam } from "../../context/TeamContext";
-import { Icons } from "../../components/Icons";
 import { 
   Flame, 
   Activity, 
@@ -16,8 +15,8 @@ import {
   Settings,
   Users,
   Eye,
-  RefreshCw,
-  X // <--- Added X explicitly
+  X,
+  Undo2
 } from "lucide-react";
 
 /* --- 1. CONFIGURATION & TYPES --- */
@@ -75,15 +74,22 @@ const GlobalStyles = () => (
     /* HORIZONTAL SCROLL FIXES */
     .sticky-container { 
         overflow-x: auto; 
-        max-width: 100vw;
+        width: 100%;
         -webkit-overflow-scrolling: touch;
+        position: relative;
     }
     .sticky-table { 
         width: 100%; 
         border-collapse: collapse; 
-        white-space: nowrap; /* Forces content to stay on one line */
+        min-width: 600px; /* Forces scroll on small screens */
     }
-    .sticky-header th { position: sticky; top: 0; z-index: 20; background: #f5f5f5; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .sticky-header th { 
+        position: sticky; 
+        top: 0; 
+        z-index: 20; 
+        background: #f5f5f5; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1); 
+    }
     
     .dna-toggle { padding: 6px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; cursor: pointer; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #888; transition: all 0.2s; }
     .dna-toggle.active { background: #4caf50; color: white; border-color: #4caf50; }
@@ -103,9 +109,9 @@ const GlobalStyles = () => (
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; }
     .modal-card { background: #222; padding: 24px; border-radius: 16px; width: 100%; max-width: 500px; border: 1px solid #444; max-height: 80vh; overflow-y: auto; }
     
-    @media (max-width: 768px) {
-        .desktop-legend { display: none; }
-    }
+    /* Scrollbar hiding */
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   `}} />
 );
 
@@ -121,7 +127,7 @@ const getHeatmapColor = (value: number, min: number, max: number, lowIsGood = fa
   if (pct < 0) pct = 0;
   if (pct > 1) pct = 1;
   if (lowIsGood) pct = 1 - pct;
-  const hue = pct * 120; // 0=Red, 120=Green
+  const hue = pct * 120;
   return `hsla(${hue}, 70%, 50%, 0.15)`;
 };
 
@@ -132,12 +138,10 @@ const getTextColor = (value: number, min: number, max: number, lowIsGood = false
 }
 
 const checkOffSeason = () => {
-    const month = new Date().getMonth(); // 0=Jan, 11=Dec
-    // Offseason typically Oct (9) through Feb (1)
+    const month = new Date().getMonth();
     return month >= 9 || month <= 1; 
 };
 
-// "AI" Logic for Summary
 const generateAnalysis = (totals: Record<string, number>, view: 'batters' | 'pitchers', leagueType: LeagueType, rosterSize: number) => {
     const strengths: string[] = [];
     const weaknesses: string[] = [];
@@ -147,11 +151,9 @@ const generateAnalysis = (totals: Record<string, number>, view: 'batters' | 'pit
 
     const cols = view === 'batters' ? BATTER_COLS : PITCHER_COLS;
 
-    // 1. Calculate Grade based on Targets
     cols.forEach(col => {
         let val = totals[col.key] || 0;
         const target = col.target || 1;
-        
         let ratio = val / target;
         if (col.lowIsGood) ratio = target / (val || 0.001);
 
@@ -162,21 +164,19 @@ const generateAnalysis = (totals: Record<string, number>, view: 'batters' | 'pit
         categoryCount++;
     });
 
-    // 2. League Type Specific Logic
     if (leagueType === 'dynasty') {
-        if (rosterSize > 35) tips.push("Deep roster detected. Consider consolidating 2 prospects for 1 proven star.");
-        if (totals['so'] < 1000 && view === 'pitchers') tips.push("Low K totals. In Dynasty, prioritize high-K% arms for long-term value.");
+        if (rosterSize > 35) tips.push("Deep roster. Consolidate 2 prospects for 1 star.");
+        if (totals['so'] < 1000 && view === 'pitchers') tips.push("Low K totals. Prioritize high-K% arms.");
     } 
     else if (leagueType === 'roto') {
-        if (strengths.includes('HR') && weaknesses.includes('SB')) tips.push("Imbalanced Offense. Trade surplus Power for Speed.");
-        if (totals['sv'] < 30 && view === 'pitchers') tips.push("Punting Saves? If not, aggressive waiver wire adds needed.");
+        if (strengths.includes('HR') && weaknesses.includes('SB')) tips.push("Imbalanced. Trade Power for Speed.");
+        if (totals['sv'] < 30 && view === 'pitchers') tips.push("Punting Saves? If not, add closers.");
     }
     else if (leagueType === 'points') {
-        if (view === 'batters' && totals['so'] > 1000) tips.push("High Strikeout Rate. In Points leagues, -1 for K's kills value.");
-        tips.push("Volume is King. Maximize Games Played above all else.");
+        if (view === 'batters' && totals['so'] > 1000) tips.push("High K rate kills points value.");
+        tips.push("Volume is King. Maximize Games Played.");
     }
 
-    // 3. Final Grade Calculation
     const gradeScore = scoreTotal / categoryCount;
     let grade = 'C';
     let gradeClass = 'grade-C';
@@ -195,7 +195,10 @@ const generateAnalysis = (totals: Record<string, number>, view: 'batters' | 'pit
 ============================================================================= */
 export default function RosterDNA() {
   const supabase = createClient();
-  const { activeTeam, setActiveTeam } = useTeam();
+  const { activeTeam } = useTeam(); // Only reading activeTeam from context
+  
+  // Local state for the team currently being analyzed (My Team OR Rival)
+  const [viewingTeam, setViewingTeam] = useState<any>(null);
   
   const [players, setPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -207,49 +210,67 @@ export default function RosterDNA() {
   const [leagueType, setLeagueType] = useState<LeagueType>('roto');
   const [showLeaguePulse, setShowLeaguePulse] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  
+  // Real Data State
   const [rivalTeams, setRivalTeams] = useState<any[]>([]);
-  const [viewingTeamName, setViewingTeamName] = useState<string>("");
 
   // --- INITIALIZATION ---
   useEffect(() => {
       const _isOff = checkOffSeason();
       setIsOffSeason(_isOff);
       if (_isOff) setMode('pace');
-      if (activeTeam) setViewingTeamName((activeTeam as any).name || "My Team");
+  }, []);
+
+  // --- SYNC VIEWING TEAM WITH ACTIVE TEAM ---
+  useEffect(() => {
+      if (activeTeam && !viewingTeam) {
+          setViewingTeam(activeTeam);
+      }
   }, [activeTeam]);
 
-  // --- DATA FETCHING (My Team & Rivals) ---
+  // --- FETCH RIVALS (Once on load) ---
+  useEffect(() => {
+      const fetchRivals = async () => {
+          if (!activeTeam) return;
+          // Fetch all teams in this league
+          const { data, error } = await supabase
+              .from('teams')
+              .select('*')
+              .eq('league_id', activeTeam.league_key);
+          
+          if (data) {
+              // Filter out my team from rivals list
+              const rivals = data.filter((t: any) => t.team_key !== activeTeam.team_key);
+              setRivalTeams(rivals);
+          }
+      };
+      fetchRivals();
+  }, [activeTeam]);
+
+  // --- FETCH ROSTER (Depends on viewingTeam) ---
   useEffect(() => {
     const fetchData = async () => {
-      if (!activeTeam) return;
+      if (!viewingTeam) return;
       setLoading(true);
       
       const params = new URLSearchParams();
-      params.append('league_id', activeTeam.league_key);
-      params.append('team_id', activeTeam.team_key);
+      // Use the league_key from activeTeam (assuming same league)
+      // Use team_key from the team we are VIEWING
+      params.append('league_id', viewingTeam.league_key);
+      params.append('team_id', viewingTeam.team_key);
       
       try {
-        // 1. Fetch Players (For current team being viewed)
         const response = await fetch(`/api/players?${params.toString()}`);
         const data = await response.json();
         const roster = Array.isArray(data) ? data : data.players;
         
-        // Filter for specific team (My Team OR Rival if viewing them)
-        const myRoster = roster.filter((p: any) => 
-            (p.team_id && String(p.team_id) === String(activeTeam.team_key)) ||
-            (p.availability === 'MY_TEAM' && !(activeTeam as any).is_rival_view) // Fixed TypeScript error here
+        // Filter players belonging to the VIEWING team
+        const teamRoster = roster.filter((p: any) => 
+             String(p.team_id) === String(viewingTeam.team_key) ||
+             (p.availability === 'MY_TEAM' && viewingTeam.team_key === activeTeam?.team_key)
         );
-        setPlayers(myRoster);
 
-        // 2. Fetch Rivals (Mocked here, but implies we pull distinct team_ids from DB)
-        if (rivalTeams.length === 0) {
-             setRivalTeams([
-                 { name: "The Bronx Bombers", team_key: "team_1", score: "A-" },
-                 { name: "ShoTime 99", team_key: "team_2", score: "B+" },
-                 { name: "Acuna Matata", team_key: "team_3", score: "C" },
-             ]);
-        }
-
+        setPlayers(teamRoster);
       } catch (e) {
         console.error("Failed to load roster", e);
       } finally {
@@ -258,7 +279,7 @@ export default function RosterDNA() {
     };
     
     fetchData();
-  }, [activeTeam]);
+  }, [viewingTeam, activeTeam]);
 
   // --- AGGREGATION LOGIC ---
   const { tableData, totals, maxValues, minValues } = useMemo(() => {
@@ -287,36 +308,23 @@ export default function RosterDNA() {
     filtered.forEach(p => {
       const stats: any = {};
       const gp = p.stats.g || p.stats.games || 1; 
-      
       if (view === 'batters') totalAB += (p.stats.ab || 0);
       if (view === 'pitchers') totalIP += (p.stats.ip || 0);
 
       activeCols.forEach(col => {
         let val = parseFloat(p.stats[col.key] || 0);
-        
-        if (mode === 'pace' && col.type === 'count') {
-           val = calculatePace(val, gp);
-        }
-
+        if (mode === 'pace' && col.type === 'count') val = calculatePace(val, gp);
         stats[col.key] = val;
-
+        
         if (val > maxVals[col.key]) maxVals[col.key] = val;
         if (val < minVals[col.key]) minVals[col.key] = val;
 
-        if (col.type === 'count') {
-          teamTotals[col.key] += val;
-        } 
-        else if (col.key === 'era') {
-           teamTotals['era_weight'] = (teamTotals['era_weight'] || 0) + (val * (p.stats.ip || 0));
-        } else if (col.key === 'whip') {
-           teamTotals['whip_weight'] = (teamTotals['whip_weight'] || 0) + (val * (p.stats.ip || 0));
-        } else if (col.key === 'avg') {
-           teamTotals['avg_weight'] = (teamTotals['avg_weight'] || 0) + (val * (p.stats.ab || 0));
-        } else if (col.key === 'ops') {
-           teamTotals['ops_weight'] = (teamTotals['ops_weight'] || 0) + (val * (p.stats.ab || 0));
-        }
+        if (col.type === 'count') teamTotals[col.key] += val;
+        else if (col.key === 'era') teamTotals['era_weight'] = (teamTotals['era_weight'] || 0) + (val * (p.stats.ip || 0));
+        else if (col.key === 'whip') teamTotals['whip_weight'] = (teamTotals['whip_weight'] || 0) + (val * (p.stats.ip || 0));
+        else if (col.key === 'avg') teamTotals['avg_weight'] = (teamTotals['avg_weight'] || 0) + (val * (p.stats.ab || 0));
+        else if (col.key === 'ops') teamTotals['ops_weight'] = (teamTotals['ops_weight'] || 0) + (val * (p.stats.ab || 0));
       });
-
       computedStats.push({ ...p, computed: stats });
     });
 
@@ -332,9 +340,10 @@ export default function RosterDNA() {
     return { tableData: computedStats, totals: teamTotals, maxValues: maxVals, minValues: minVals };
   }, [players, mode, view]);
 
-  // --- REPORT GENERATION ---
   const report = useMemo(() => generateAnalysis(totals, view, leagueType, players.length), [totals, view, leagueType, players.length]);
 
+  // Helper to check if we are viewing a rival
+  const isViewingRival = viewingTeam?.team_key !== activeTeam?.team_key;
 
   return (
     <div style={{ minHeight: "100vh", background: "#111", paddingBottom: 100 }}>
@@ -346,20 +355,30 @@ export default function RosterDNA() {
           
           {/* USER TEAM NAME & CONTEXT */}
           <div style={{ marginBottom: 20 }}>
-             {activeTeam && (
-                 <div style={{ color: COLORS.GOLD, fontSize: 16, marginBottom: 4 }} className="team-name-font">
-                     {(activeTeam as any).name || (activeTeam as any).team_name || "My Team"}
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                 <div>
+                    {/* Unique Yellow Team Font */}
+                    <div style={{ color: isViewingRival ? '#ff9800' : COLORS.GOLD, fontSize: 18, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }} className="team-name-font">
+                        {viewingTeam ? (viewingTeam.name || viewingTeam.team_name) : "Loading..."}
+                        {isViewingRival && <Eye size={16} />}
+                    </div>
+                    
+                    {/* League Info Row */}
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 11, color: '#888' }}>
+                        <span>{(activeTeam as any)?.league_name || "Major League"} • 12 Teams</span>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={() => setLeagueType('roto')} className={`league-type-btn ${leagueType === 'roto' ? 'active' : ''}`}>ROTO</button>
+                            <button onClick={() => setLeagueType('points')} className={`league-type-btn ${leagueType === 'points' ? 'active' : ''}`}>PTS</button>
+                            <button onClick={() => setLeagueType('dynasty')} className={`league-type-btn ${leagueType === 'dynasty' ? 'active' : ''}`}>DYN</button>
+                        </div>
+                        <button onClick={() => setShowRules(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#666' }}><Info size={14} /></button>
+                    </div>
                  </div>
-             )}
-             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                 <h1 style={{ margin: 0, fontSize: 24, fontWeight: 900, color: "#fff", display: "flex", alignItems: "center", gap: 10 }}>
-                    <Activity color="#4caf50" /> <span className="dna-font">ROSTER <span style={{color: '#4caf50'}}>DNA</span></span>
-                 </h1>
-                 
+
                  {/* Off-season badge */}
                  {isOffSeason && (
                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(33, 150, 243, 0.15)', color: '#64b5f6', padding: '4px 8px', borderRadius: 8, fontSize: 10, fontWeight: 700 }}>
-                         <Snowflake size={12} /> OFF-SEASON
+                         <Snowflake size={12} />
                      </div>
                  )}
              </div>
@@ -397,9 +416,15 @@ export default function RosterDNA() {
                <button className={`dna-toggle ${mode === 'pace' ? 'active' : ''}`} onClick={() => setMode('pace')}>Season Pace</button>
             </div>
             
-            <button onClick={() => setShowLeaguePulse(true)} style={{ background: 'none', border: 'none', color: '#4caf50', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                LEAGUE PULSE <ArrowRight size={12} />
-            </button>
+            {isViewingRival ? (
+                <button onClick={() => setViewingTeam(activeTeam)} style={{ background: '#333', border: '1px solid #666', color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', padding: "6px 12px", borderRadius: 20 }}>
+                    <Undo2 size={12} /> Back to My Team
+                </button>
+            ) : (
+                <button onClick={() => setShowLeaguePulse(true)} style={{ background: 'none', border: 'none', color: '#4caf50', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                    LEAGUE PULSE <ArrowRight size={12} />
+                </button>
+            )}
           </div>
 
           {/* TEAM TOTALS ROW */}
@@ -439,8 +464,8 @@ export default function RosterDNA() {
         {loading ? (
            <div style={{ padding: 60, textAlign: "center", color: "#666", fontStyle: "italic" }}>Extracting DNA...</div>
         ) : (
-          <div className="sticky-container" style={{ overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff" }}>
+          <div className="sticky-container">
+            <table className="sticky-table">
               <thead className="sticky-header">
                 <tr>
                   <th style={{ textAlign: "left", padding: "12px 16px", minWidth: 160, background: '#111', color: '#fff', borderBottom: '1px solid #333' }}>Player</th>
@@ -484,8 +509,8 @@ export default function RosterDNA() {
 
       {/* LEAGUE PULSE MODAL */}
       {showLeaguePulse && (
-          <div className="modal-overlay">
-              <div className="modal-card">
+          <div className="modal-overlay" onClick={() => setShowLeaguePulse(false)}>
+              <div className="modal-card" onClick={e => e.stopPropagation()}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                      <h2 style={{ color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
                         <Trophy size={24} color="#FFD700" /> League Pulse
@@ -494,37 +519,37 @@ export default function RosterDNA() {
                   </div>
 
                   <p style={{ color: '#888', fontSize: 12, marginBottom: 20 }}>
-                      Select a rival team to view their Roster DNA and spy on their strengths/weaknesses.
+                      Spy on your rivals. Tap a team to analyze their Roster DNA.
                   </p>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {/* Your Team (Top) */}
                       <button 
-                         onClick={() => { setViewingTeamName((activeTeam as any).name); setShowLeaguePulse(false); }}
+                         onClick={() => { setViewingTeam(activeTeam); setShowLeaguePulse(false); }}
                          style={{ background: '#333', border: '1px solid #4caf50', padding: 16, borderRadius: 8, textAlign: 'left', color: 'white', display: 'flex', justifyContent: 'space-between' }}
                       >
-                         <span style={{ fontWeight: 700 }}>{(activeTeam as any).name} (Me)</span>
+                         <span style={{ fontWeight: 700 }}>{(activeTeam as any)?.name || "My Team"} (Me)</span>
                          <span style={{ fontSize: 12, color: '#4caf50' }}>Active</span>
                       </button>
 
-                      {/* Rivals Loop */}
-                      {rivalTeams.map((t) => (
+                      {/* Real Rivals Loop */}
+                      {rivalTeams.length > 0 ? rivalTeams.map((t) => (
                          <button 
                             key={t.team_key}
                             onClick={() => { 
-                                // In real app: setActiveTeam(t) to trigger fetch, but for now we simulate viewing name
-                                setViewingTeamName(t.name); 
+                                setViewingTeam(t); 
                                 setShowLeaguePulse(false); 
                             }}
                             style={{ background: '#2a2a2a', border: '1px solid #444', padding: 16, borderRadius: 8, textAlign: 'left', color: '#ccc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                          >
-                            <span>{t.name}</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <span style={{ fontSize: 10, background: '#444', padding: '2px 6px', borderRadius: 4 }}>{t.score}</span>
-                                <ArrowRight size={14} color="#666" />
-                            </div>
+                            <span>{t.name || t.team_name || "Team " + t.team_key}</span>
+                            <ArrowRight size={14} color="#666" />
                          </button>
-                      ))}
+                      )) : (
+                          <div style={{ padding: 20, textAlign: 'center', color: '#666', fontStyle: 'italic', background: '#1a1a1a', borderRadius: 8 }}>
+                             No other teams found in this league context.
+                          </div>
+                      )}
                   </div>
               </div>
           </div>
@@ -532,8 +557,8 @@ export default function RosterDNA() {
 
       {/* RULES MODAL */}
       {showRules && (
-          <div className="modal-overlay">
-              <div className="modal-card">
+          <div className="modal-overlay" onClick={() => setShowRules(false)}>
+              <div className="modal-card" onClick={e => e.stopPropagation()}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                      <h2 style={{ color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
                         <Settings size={24} color="#fff" /> League Rules
