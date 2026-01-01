@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/app/utils/supabase/client"; 
 import { useRouter } from "next/navigation"; 
-import { Newspaper, Globe, Users, Flag, X, Lightbulb, Flame } from "lucide-react"; // Added Flame icon
+import { Newspaper, Globe, Users, Flag, X, Lightbulb, Flame } from "lucide-react";
 
 /* --- 1. COMPONENTS --- */
 import { PlayerDetailPopup } from "../components/PlayerDetailPopup";
@@ -51,9 +51,8 @@ const BATTER_POSITIONS: Position[] = ["C", "1B", "2B", "3B", "SS", "OF", "DH"];
 const PITCHER_POSITIONS: Position[] = ["SP", "RP"];
 const ALL_POSITIONS: Position[] = [...BATTER_POSITIONS, ...PITCHER_POSITIONS];
 
-// ADDED "POPULAR" TO THE START
 const CUSTOM_TAB_ORDER = [
-  "popular", // <--- NEW
+  "popular", 
   "profile",        
   "std_hit",        
   "std_pitch",      
@@ -67,10 +66,10 @@ const CUSTOM_TAB_ORDER = [
 
 // DEFINING THE POPULAR STATS MANUALLY
 const POPULAR_STATS_LIST = [
-    'hr', 'sb', 'avg', 'ops', // Classics
-    'era', 'whip', 'so', 'sv', // Pitching Classics
-    'exit_velocity_avg', 'barrel_pct', // Statcast Batting
-    'k_pct', 'whiff_pct', 'stuff_plus' // Advanced
+    'hr', 'sb', 'avg', 'ops', 
+    'era', 'whip', 'so', 'sv', 
+    'exit_velocity_avg', 'barrel_pct', 
+    'k_pct', 'whiff_pct', 'stuff_plus' 
 ];
 
 const COLORS = {
@@ -131,7 +130,7 @@ const STYLES = {
 
 /* --- ICONS --- */
 const CategoryIcons = {
-  Popular: <Flame size={14} color="#ff9100" fill="#ff9100" />, // NEW ICON
+  Popular: <Flame size={14} color="#ff9100" fill="#ff9100" />, 
   Context: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2196f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>,
   Bat: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l12 12 3-3-12-12z" /></svg>,
   Power: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f44336" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.5-3.3a9 9 0 0 0 3 3.3z"></path></svg>,
@@ -144,14 +143,14 @@ const CategoryIcons = {
 };
 
 const CATEGORY_DISPLAY: Record<string, { label: string; icon: any }> = {
-  "popular":          { label: "Popular",    icon: CategoryIcons.Popular }, // <--- NEW DISPLAY
+  "popular":          { label: "Popular",    icon: CategoryIcons.Popular }, 
   "profile":          { label: "Profile",    icon: CategoryIcons.Context },
-  "std_hit":          { label: "Roto Batting",  icon: CategoryIcons.Bat }, 
+  "std_hit":          { label: "Batting",  icon: CategoryIcons.Bat }, 
   "power":            { label: "Power",       icon: CategoryIcons.Power },
   "discipline":       { label: "Discipline", icon: CategoryIcons.Eye },
   "contact":          { label: "Contact",     icon: CategoryIcons.Target },
   "speed":            { label: "Speed",       icon: CategoryIcons.Speed }, 
-  "std_pitch":        { label: "Roto Pitching",  icon: CategoryIcons.Ball }, 
+  "std_pitch":        { label: "Pitching",  icon: CategoryIcons.Ball }, 
   "pitch_shape":      { label: "Stuff",       icon: CategoryIcons.Stuff },
   "pitch_outcomes":   { label: "Outcomes",    icon: CategoryIcons.Check },
 };
@@ -160,6 +159,7 @@ const CATEGORY_DISPLAY: Record<string, { label: string; icon: any }> = {
 const GlobalStyles = () => (
   <style dangerouslySetInnerHTML={{ __html: `
     @import url('https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@700&display=swap'); /* Added for DNA font */
     
     @keyframes pulse-ring { 0% { transform: scale(0.33); opacity: 1; } 80%, 100% { opacity: 0; } }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -167,10 +167,22 @@ const GlobalStyles = () => (
     .news-pulse::after { content: ''; position: absolute; top: -2px; left: -2px; width: 12px; height: 12px; background-color: #ff1744; border-radius: 50%; animation: pulse-ring 1.25s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
     .sticky-container { overflow: auto; max-height: 800px; position: relative; }
     .sticky-table { border-collapse: separate; border-spacing: 0; width: 100%; }
+    
+    /* REINFORCED STICKY HEADERS FOR MOBILE */
     .sticky-table thead th { position: sticky; top: 0; z-index: 20; background: #fafafa; box-shadow: inset 0 -1px 0 #eee; cursor: pointer; user-select: none; }
-    .sticky-table td:nth-child(1), .sticky-table th:nth-child(1) { position: sticky; left: 0; z-index: 30; background: white; }
-    .sticky-table th:nth-child(1) { z-index: 40; background: #fafafa; top: 0; } 
+    .sticky-table td:nth-child(1) { position: sticky; left: 0; z-index: 30; background: white; }
+    
+    /* CRITICAL FIX: Higher Z-Index and explicit sticky positioning for the corner cell */
+    .sticky-table th:nth-child(1) { 
+        position: sticky !important; 
+        left: 0 !important; 
+        top: 0 !important; 
+        z-index: 50 !important; 
+        background: #fafafa; 
+    } 
+    
     .sticky-table td:nth-child(1)::after, .sticky-table th:nth-child(1)::after { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 1px; background: #eee; }
+    
     .preset-card { transition: all 0.2s ease; border: 1px solid rgba(255,255,255,0.1); }
     .preset-card:hover { transform: translateY(-4px); border-color: #1b5e20; box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
     .compare-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 2000; display: flex; justify-content: center; align-items: center; padding: 20px; backdrop-filter: blur(5px); }
@@ -196,14 +208,11 @@ const GlobalStyles = () => (
       .wide-container { width: 99.5%; } 
       .main-padding { padding: 4px !important; }
       .desktop-nav-links { display: none !important; }
-      
-      /* HIDE UPGRADE BTN ON MOBILE TO MAKE ROOM FOR SIGN IN */
       .upgrade-btn { display: none !important; }
-      
-      /* ENSURE AUTH SECTION IS VISIBLE */
       .nav-auth-section { display: flex !important; }
 
-      .sticky-table th:nth-child(1), .sticky-table td:nth-child(1) { width: 80px !important; min-width: 80px !important; max-width: 80px !important; padding: 8px 4px !important; box-shadow: 2px 0 6px rgba(0,0,0,0.15); z-index: 50; }
+      .sticky-table th:nth-child(1), .sticky-table td:nth-child(1) { width: 80px !important; min-width: 80px !important; max-width: 80px !important; padding: 8px 4px !important; box-shadow: 2px 0 6px rgba(0,0,0,0.15); }
+      
       .desktop-player-info { display: none !important; }
       .mobile-player-info { display: flex !important; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
       .mobile-bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; right: 0; background: #121212; border-top: 1px solid #2a2a2a; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); height: 60px; align-items: center; overflow-x: auto; justify-content: flex-start; box-shadow: 0 -4px 15px rgba(0,0,0,0.5); }
@@ -301,16 +310,17 @@ export default function Home() {
   const [isUserPaid, setIsUserPaid] = useState(true); 
   const [savedFilters, setSavedFilters] = useState<any[]>([]);
 
-  // --- STATE: FILTERS ---
+  // --- STATE: FILTERS (DEFAULT STATS SET HERE) ---
   const [openGroup, setOpenGroup] = useState<CoreId | null>(null); 
   const [openGeneralGroup, setOpenGeneralGroup] = useState<GeneralGroup>(null);
   const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
-  const [selectedStatKeys, setSelectedStatKeys] = useState<StatKey[]>([]);
+  // CHANGED: Default stats are now populated
+  const [selectedStatKeys, setSelectedStatKeys] = useState<StatKey[]>(['hr', 'sb', 'avg', 'era', 'whip', 'so']);
   const [level, setLevel] = useState<Level>("all");
   const [leagueStatus, setLeagueStatus] = useState<LeagueStatus>("all");
   const [selectedTeams, setSelectedTeams] = useState<TeamAbbr[]>([...ALL_TEAMS]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortKey, setSortKey] = useState<string | null>("rotoScore"); 
+  const [sortKey, setSortKey] = useState<string | null>("rangeScore"); // CHANGED DEFAULT TO OVERALL RANK 
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [statThresholds, setStatThresholds] = useState<Record<string, number>>({});
   const [minTools, setMinTools] = useState<number>(0);
@@ -458,10 +468,13 @@ export default function Home() {
   const handleGlobalReset = () => {
     setOpenGroup(null);
     setOpenGeneralGroup(null);
-    setSelectedPositions([]); setSelectedStatKeys([]); setLevel("all"); setLeagueStatus("all");
+    setSelectedPositions([]); 
+    // CHANGED: Reset to default stats
+    setSelectedStatKeys(['hr', 'sb', 'avg', 'era', 'whip', 'so']); 
+    setLevel("all"); setLeagueStatus("all");
     setSelectedTeams([...ALL_TEAMS]); setSearchQuery(""); setStatThresholds({}); setMinTools(0);
     setActivePlayerId(null); setDateRange("season_curr"); setCustomStart(""); setCustomEnd(""); setCompareList([]);
-    setSortKey("rotoScore"); setSortDir("desc");
+    setSortKey("rangeScore"); setSortDir("desc");
   };
 
   const scrollToResults = () => { if (resultsTableRef.current) resultsTableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
@@ -604,8 +617,7 @@ export default function Home() {
     });
   }, [players, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange]);
 
-
-  /* =============================================================================
+/* =============================================================================
        RENDER FUNCTIONS
    ============================================================================= */
 
@@ -613,7 +625,12 @@ export default function Home() {
     if (!openGroup) return null;
     
     // DECIDE WHICH LIST TO RENDER: POPULAR OR STANDARD GROUP
-    const listToRender = openGroup === 'popular' ? POPULAR_STATS_LIST : CORE_STATS[openGroup];
+    // TypeScript Fix: Explicitly cast the lists to StatKey[] so TS knows they are safe keys
+    // TypeScript Fix: Cast openGroup to string for the comparison to clear the error
+    // and cast it as CoreId in the else block to ensure safety.
+    const listToRender: StatKey[] = (openGroup as string) === 'popular' 
+        ? (POPULAR_STATS_LIST as StatKey[]) 
+        : (CORE_STATS[openGroup as CoreId] as StatKey[]);
 
     return (
       <div style={{ background: "#fafafa", borderBottom: "1px solid #ddd", borderTop: `2px solid ${COLORS.DARK_GREEN}`, padding: "20px", boxShadow: "inset 0 4px 12px rgba(0,0,0,0.05)", animation: "slideDownTray 0.2s ease-out" }}>
@@ -902,7 +919,8 @@ export default function Home() {
             </div>
             <div className="desktop-nav-links" style={{ display: 'flex', gap: '6px', alignItems: 'center', marginLeft: '10px' }}>
               <a href="#" className="nav-link active">Filters</a>
-              <a href="#" className="nav-link">Rosters</a>
+              {/* UPDATED LINK */}
+              <a href="/roster" className="nav-link">Roster <span style={{ fontFamily: '"Courier Prime", monospace', fontWeight: 900, letterSpacing: '1px', color: '#4caf50' }}>DNA</span></a>
               <a href="#" className="nav-link">Closers</a>
               <a href="#" className="nav-link">Prospects</a>
               <a href="#" className="nav-link">Community</a>
@@ -977,7 +995,19 @@ export default function Home() {
 
       <div className="mobile-bottom-nav">
         {[{ id: "filters", label: "Filters", Icon: Icons.Filters }, { id: "rosters", label: "Rosters", Icon: Icons.Rosters }, { id: "closers", label: "Closers", Icon: Icons.Closers }, { id: "prospects", label: "Prospects", Icon: Icons.Prospects }, { id: "grade", label: "Grade", Icon: Icons.Grade }, { id: "trade", label: "Trade", Icon: Icons.Trade }, { id: "community", label: "Community", Icon: Icons.Community }, { id: "sync", label: "Sync", Icon: Icons.Sync }].map((item) => (
-          <a key={item.id} href="#" onClick={(e) => { e.preventDefault(); setActiveTab(item.id); if(item.id === 'sync') setIsSyncModalOpen(true); }} className={`mobile-nav-item ${activeTab === item.id ? "active" : ""}`}><item.Icon />{item.label}</a>
+          <a 
+            key={item.id} 
+            href={item.id === 'rosters' ? '/roster' : '#'}
+            onClick={(e) => { 
+              if (item.id === 'rosters') return;
+              e.preventDefault(); 
+              setActiveTab(item.id); 
+              if(item.id === 'sync') setIsSyncModalOpen(true); 
+            }} 
+            className={`mobile-nav-item ${activeTab === item.id ? "active" : ""}`}
+          >
+            <item.Icon />{item.label}
+          </a>
         ))}
       </div>
 
@@ -1267,9 +1297,7 @@ export default function Home() {
                           </th>
                         );
                       })}
-                      <th onClick={() => handleSort('dynaScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: COLORS.DYNASTY_PURPLE }}>Dyna</th>
-                      <th onClick={() => handleSort('rotoScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: COLORS.DARK_GREEN }}>Roto</th>
-                      <th onClick={() => handleSort('pointsScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: "#0288d1" }}>Points</th> 
+                      {/* ONLY SHOW OVERALL SCORE NOW */}
                       <th onClick={() => handleSort('rangeScore')} style={{ padding: "8px 12px", textAlign: "right", cursor: "pointer", color: COLORS.RANGE_ORANGE }}>Overall</th>
                     </tr>
                   </thead>
@@ -1368,9 +1396,6 @@ export default function Home() {
 
                               return <td key={k} style={{ textAlign: "right", padding: "8px 12px", fontWeight: 700, fontFamily: "ui-monospace, monospace" }}>{displayVal}</td>
                           })}
-                            <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: COLORS.DYNASTY_PURPLE }}>{p.dynaScore}</td>
-                            <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: COLORS.DARK_GREEN }}>{p.rotoScore}</td>
-                            <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: "#0288d1" }}>{p.pointsScore}</td> 
                             <td style={{ textAlign: "right", fontWeight: 900, padding: "8px 12px", fontSize: 14, color: COLORS.RANGE_ORANGE }}>{p.rangeScore}</td>
                           </tr>
 
