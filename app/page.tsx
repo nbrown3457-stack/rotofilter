@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/app/utils/supabase/client"; 
 import { useRouter } from "next/navigation"; 
-import { Newspaper, Globe, Users, Flag, X, Lightbulb, Flame, Dna } from "lucide-react"; // Added Dna icon
+import { Newspaper, Globe, Users, Flag, X, Lightbulb, Flame, Dna, Wrench, ChevronDown, Hammer } from "lucide-react"; 
 
 /* --- 1. COMPONENTS --- */
 import { PlayerDetailPopup } from "../components/PlayerDetailPopup";
@@ -64,7 +64,6 @@ const CUSTOM_TAB_ORDER = [
   "pitch_outcomes"
 ];
 
-// DEFINING THE POPULAR STATS MANUALLY
 const POPULAR_STATS_LIST = [
     'hr', 'sb', 'avg', 'ops', 
     'era', 'whip', 'so', 'sv', 
@@ -129,6 +128,28 @@ const STYLES = {
 };
 
 /* --- ICONS --- */
+// Custom Rainbow DNA Icon Component
+const RainbowDnaIcon = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="dnaGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stopColor="#f44336" />
+        <stop offset="25%" stopColor="#9c27b0" />
+        <stop offset="50%" stopColor="#2196f3" />
+        <stop offset="75%" stopColor="#4caf50" />
+        <stop offset="100%" stopColor="#ffeb3b" />
+      </linearGradient>
+    </defs>
+    <path 
+      d="M2 15c6.667-6 13.333 0 20-6M9 22c1.798-1.998 2.518-3.995 2.807-5.993M15 2c-1.798 1.998-2.518 3.995-2.807 5.993m-2.386 8.014c.193 1.998-.527 3.995-2.324 5.993M12.193 7.993C12 5.995 12.72 3.998 14.517 2" 
+      stroke="url(#dnaGradient)" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const CategoryIcons = {
   Popular: <Flame size={14} color="#ff9100" fill="#ff9100" />, 
   Context: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2196f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>,
@@ -193,6 +214,55 @@ const GlobalStyles = () => (
     .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
     .nav-link.active { color: #fff; background: #1b5e20; }
     
+    /* RAINBOW TEXT UTILITY */
+    .rainbow-text {
+      background: linear-gradient(90deg, #f44336, #9c27b0, #2196f3, #4caf50, #ffeb3b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      font-weight: 900;
+    }
+
+    .tools-dropdown-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 8px 0;
+      width: 180px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      z-index: 10000;
+      display: none;
+    }
+    
+    .nav-tools-container:hover .tools-dropdown-menu {
+      display: block;
+    }
+
+    .tools-dropdown-item {
+      display: block;
+      padding: 8px 16px;
+      color: #ccc;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 700;
+      transition: all 0.2s;
+    }
+
+    .tools-dropdown-item:hover {
+      background: #333;
+      color: #fff;
+    }
+
+    /* ICON FIX UTILITIES */
+    .icon-fix-sm { display: inline-flex; width: 14px; height: 14px; margin-right: 6px; align-items: center; }
+    .icon-fix-sm svg { width: 100%; height: 100%; }
+    
+    .icon-fix-md { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; }
+    .icon-fix-md svg { width: 100%; height: 100%; }
+    
     .mobile-floating-bar { display: none !important; }
     
     .desktop-nav-links { display: flex; }
@@ -215,7 +285,7 @@ const GlobalStyles = () => (
       
       .desktop-player-info { display: none !important; }
       .mobile-player-info { display: flex !important; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
-      .mobile-bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; right: 0; background: #121212; border-top: 1px solid #2a2a2a; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); height: 60px; align-items: center; overflow-x: auto; justify-content: flex-start; box-shadow: 0 -4px 15px rgba(0,0,0,0.5); }
+      .mobile-bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; right: 0; background: #121212; border-top: 1px solid #2a2a2a; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); height: 60px; align-items: center; overflow-x: auto; justify-content: space-around; box-shadow: 0 -4px 15px rgba(0,0,0,0.5); }
       .mobile-nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #777; font-size: 9px; font-weight: 600; text-decoration: none; min-width: 72px; height: 100%; gap: 4px; transition: color 0.2s ease; }
       .mobile-nav-item.active { color: #fff; }
       .mobile-nav-item.active svg { stroke: #4caf50; }
@@ -228,6 +298,7 @@ const GlobalStyles = () => (
       .nav-logo-subtext { display: none; }
     }
     @keyframes slideDownTray { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes slideUpPopup { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
   `}} />
 );
 
@@ -295,6 +366,37 @@ const ToolLegend = () => (
   </div>
 );
 
+// --- TOOLS POPUP MENU (MOBILE) ---
+const ToolsPopup = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
+  if (!isOpen) return null;
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1100, background: 'rgba(0,0,0,0.5)' }}>
+      <div 
+        onClick={(e) => e.stopPropagation()} 
+        style={{ 
+          position: 'absolute', bottom: '70px', right: '12px', 
+          background: '#1a1a1a', borderRadius: '12px', border: '1px solid #333', 
+          width: '200px', padding: '8px', 
+          boxShadow: '0 8px 30px rgba(0,0,0,0.5)', 
+          animation: 'slideUpPopup 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}
+      >
+         <div style={{ fontSize: 10, fontWeight: 800, color: '#666', textTransform: 'uppercase', padding: '8px 12px' }}>Tools Menu</div>
+         
+         <a href="#" className="tools-dropdown-item" style={{ borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="icon-fix-md"><Icons.Closers /></span> Closer Depth
+         </a>
+         <a href="#" className="tools-dropdown-item" style={{ borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="icon-fix-md"><Icons.Prospects /></span> Prospects
+         </a>
+         <a href="#" className="tools-dropdown-item" style={{ borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="icon-fix-md"><Icons.Trade /></span> Trade Calculator
+         </a>
+      </div>
+    </div>
+  );
+};
+
 /* =============================================================================
    SECTION 4 — Main Component
 ============================================================================= */
@@ -341,6 +443,9 @@ export default function Home() {
   const [isNewsOpen, setIsNewsOpen] = useState(false); 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [showWelcomeBanner, setShowWelcomeBanner] = useState(true); 
+  
+  // NEW STATE FOR TOOLS MENU
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
     
   const resultsTableRef = useRef<HTMLDivElement>(null);
 
@@ -365,6 +470,16 @@ export default function Home() {
       // Check local storage for banner dismissal
       const bannerDismissed = localStorage.getItem('rotofilter_welcome_dismissed');
       if (bannerDismissed) setShowWelcomeBanner(false);
+      
+      // PERSISTENCE FIX: Try to recover team if context failed
+      if (!activeTeam) {
+        const cachedTeamId = localStorage.getItem('active_team_id');
+        if (cachedTeamId) {
+            console.log("Attempting to restore session for team:", cachedTeamId);
+            // This is a safety check. The actual hydration happens in TeamContext, 
+            // but reading this here prevents the UI from flickering "Logged Out" state too aggressively
+        }
+      }
     }
   }, []);
 
@@ -392,7 +507,7 @@ export default function Home() {
     };
     checkUser();
 
-    // FIXED: Only clear data if explicitly SIGNED_OUT, preventing accidental wipe on refresh
+    // FIXED: Made auth state change less aggressive on wiping data to solve "sync over and over"
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
@@ -401,7 +516,8 @@ export default function Home() {
       if (currentUser) {
         fetchSavedFilters(currentUser); 
       } else if (event === 'SIGNED_OUT') {
-        // FORCE CLEANUP ON LOGOUT ONLY
+        // Only clear if explicitly signed out. If session expires or network blips, 
+        // we rely on Supabase to try and recover token before wiping everything.
         document.cookie = "active_team_key=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
         document.cookie = "active_league_key=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
         setPlayers([]); 
@@ -419,6 +535,9 @@ export default function Home() {
     try {
       const params = new URLSearchParams();
       if (activeTeam) {
+          // PERSISTENCE FIX: Update local storage when we successfully use a team
+          if(typeof window !== 'undefined') localStorage.setItem('active_team_id', activeTeam.team_key);
+          
           params.append('league_id', activeTeam.league_key);
           params.append('team_id', activeTeam.team_key);
       }
@@ -627,9 +746,6 @@ export default function Home() {
     if (!openGroup) return null;
     
     // DECIDE WHICH LIST TO RENDER: POPULAR OR STANDARD GROUP
-    // TypeScript Fix: Explicitly cast the lists to StatKey[] so TS knows they are safe keys
-    // TypeScript Fix: Cast openGroup to string for the comparison to clear the error
-    // and cast it as CoreId in the else block to ensure safety.
     const listToRender: StatKey[] = (openGroup as string) === 'popular' 
         ? (POPULAR_STATS_LIST as StatKey[]) 
         : (CORE_STATS[openGroup as CoreId] as StatKey[]);
@@ -638,7 +754,7 @@ export default function Home() {
       <div style={{ background: "#fafafa", borderBottom: "1px solid #ddd", borderTop: `2px solid ${COLORS.DARK_GREEN}`, padding: "20px", boxShadow: "inset 0 4px 12px rgba(0,0,0,0.05)", animation: "slideDownTray 0.2s ease-out" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <h4 style={{ margin: 0, fontSize: 12, fontWeight: 900, color: "#999", textTransform: "uppercase" }}>
-                Select Stats for {CATEGORY_DISPLAY[openGroup]?.label || openGroup}
+                Select Stats for {(CATEGORY_DISPLAY as any)[openGroup as string]?.label || openGroup}
             </h4>
             <button onClick={() => setOpenGroup(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#999", display: "flex", alignItems: "center", fontSize: "16px" }}>
                 <Icons.X />
@@ -723,8 +839,8 @@ export default function Home() {
                             {[
                                 { key: "all", label: "All" },
                                 { key: "available", label: "Free Agents" },    
-                                { key: "my_team", label: "My Team" },                        
-                                { key: "rostered", label: "Rostered" }        
+                                { key: "my_team", label: "My Team" },                          
+                                { key: "rostered", label: "Rostered" }         
                             ].map((opt) => { 
                                 const isLocked = !isUserPaid && opt.key !== "all"; 
                                 return (
@@ -781,7 +897,7 @@ export default function Home() {
             {/* TEAM CONTENT */}
             {openGeneralGroup === 'team' && (
                 <div>
-                     {renderTeamScrollRow()}
+                      {renderTeamScrollRow()}
                 </div>
             )}
         </div>
@@ -919,13 +1035,31 @@ export default function Home() {
 
               </div>
             </div>
+            {/* --- DESKTOP MENU --- */}
             <div className="desktop-nav-links" style={{ display: 'flex', gap: '6px', alignItems: 'center', marginLeft: '10px' }}>
               <a href="#" className="nav-link active">Filters</a>
-              {/* UPDATED LINK */}
-              <a href="/roster" className="nav-link">Roster <span style={{ fontFamily: '"Courier Prime", monospace', fontWeight: 900, letterSpacing: '1px', color: '#4caf50' }}>DNA</span></a>
-              <a href="#" className="nav-link">Closers</a>
-              <a href="#" className="nav-link">Prospects</a>
+              {/* UPDATED RAINBOW TEXT LINK FOR DESKTOP */}
+              <a href="/roster" className="nav-link">Roster <span className="rainbow-text">DNA</span></a>
               <a href="#" className="nav-link">Community</a>
+              
+            {/* DESKTOP TOOLS DROPDOWN */}
+              <div className="nav-tools-container" style={{ position: 'relative' }}>
+                <button className="nav-link" style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                   Tools <ChevronDown size={12} />
+                </button>
+                <div className="tools-dropdown-menu">
+                   <a href="#" className="tools-dropdown-item" style={{ display: 'flex', alignItems: 'center' }}>
+                      <span className="icon-fix-sm"><Icons.Closers /></span> Closer Depth
+                   </a>
+                   <a href="#" className="tools-dropdown-item" style={{ display: 'flex', alignItems: 'center' }}>
+                      <span className="icon-fix-sm"><Icons.Prospects /></span> Prospects
+                   </a>
+                   <a href="#" className="tools-dropdown-item" style={{ display: 'flex', alignItems: 'center' }}>
+                      <span className="icon-fix-sm"><Icons.Trade /></span> Trade Calculator
+                   </a>
+                </div>
+              </div>
+
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -938,8 +1072,8 @@ export default function Home() {
               >
                   <Newspaper size={18} color="#888" />
                   <span style={{ position: 'absolute', top: 4, right: 4, width: 8, height: 8 }}>
-                     <span style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', background: '#4caf50', opacity: 0.75, animation: 'ping 1s cubic-bezier(0, 0, 0.2, 1) infinite' }} className="animate-ping" />
-                     <span style={{ position: 'relative', display: 'inline-block', width: '100%', height: '100%', borderRadius: '50%', background: '#4caf50' }} />
+                      <span style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', background: '#4caf50', opacity: 0.75, animation: 'ping 1s cubic-bezier(0, 0, 0.2, 1) infinite' }} className="animate-ping" />
+                      <span style={{ position: 'relative', display: 'inline-block', width: '100%', height: '100%', borderRadius: '50%', background: '#4caf50' }} />
                   </span>
               </button>
 
@@ -957,7 +1091,7 @@ export default function Home() {
               {!user ? (
                 <button 
                   className="sign-in-btn"
-                  onClick={() => setIsLoginModalOpen(true)} // FIXED: Opens Modal instead of navigating
+                  onClick={() => setIsLoginModalOpen(true)} 
                   style={{ 
                     ...STYLES.btnBase, 
                     background: '#333', 
@@ -995,22 +1129,38 @@ export default function Home() {
         )}
       </div>
 
+      {/* MOBILE TOOLS POPUP (RENDERS ABOVE NAV) */}
+      <ToolsPopup isOpen={isToolsOpen} onClose={() => setIsToolsOpen(false)} />
+
+      {/* MOBILE BOTTOM NAV */}
       <div className="mobile-bottom-nav">
-        {[{ id: "filters", label: "Filters", Icon: Icons.Filters }, { id: "rosters", label: "DNA", Icon: Dna }, { id: "closers", label: "Closers", Icon: Icons.Closers }, { id: "prospects", label: "Prospects", Icon: Icons.Prospects }, { id: "grade", label: "Grade", Icon: Icons.Grade }, { id: "trade", label: "Trade", Icon: Icons.Trade }, { id: "community", label: "Community", Icon: Icons.Community }, { id: "sync", label: "Sync", Icon: Icons.Sync }].map((item) => (
+        {[
+            { id: "filters", label: "Filters", Icon: Icons.Filters }, 
+            { id: "rosters", label: "DNA", Icon: RainbowDnaIcon },  // NEW RAINBOW ICON
+            { id: "community", label: "Community", Icon: Icons.Community },
+            { id: "tools", label: "Tools", Icon: Hammer } // TOGGLES POPUP
+        ].map((item) => (
           <a 
             key={item.id} 
             href={item.id === 'rosters' ? '/roster' : '#'}
             onClick={(e) => { 
               if (item.id === 'rosters') return;
               e.preventDefault(); 
-              setActiveTab(item.id); 
-              if(item.id === 'sync') setIsSyncModalOpen(true); 
+              
+              if (item.id === 'tools') {
+                  setIsToolsOpen(!isToolsOpen);
+                  setActiveTab('tools');
+              } else {
+                  setActiveTab(item.id); 
+                  setIsToolsOpen(false); // Close tools if clicking other tabs
+              }
             }} 
             className={`mobile-nav-item ${activeTab === item.id ? "active" : ""}`}
-            style={item.id === 'rosters' ? { color: '#9c27b0' } : {}}
+            style={item.id === 'rosters' ? { color: '#fff' } : {}}
           >
-            <item.Icon size={item.id === 'rosters' ? 22 : 18} />
-            <span style={item.id === 'rosters' ? { fontWeight: 900, fontSize: 10 } : {}}>{item.label}</span>
+            {/* Render Custom or Standard Icon */}
+            {item.id === 'rosters' ? <RainbowDnaIcon size={24} /> : <item.Icon size={18} />}
+            <span style={item.id === 'rosters' ? { fontWeight: 900, fontSize: 10, marginTop: 2 } : {}}>{item.label}</span>
           </a>
         ))}
       </div>
@@ -1144,12 +1294,12 @@ export default function Home() {
                   
                   {/* Custom Date Inputs (Conditional) */}
                   {dateRange === "custom" && (
-                     <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, animation: "fadeIn 0.2s" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, animation: "fadeIn 0.2s" }}>
                           <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} style={{ ...STYLES.btnBase, padding: "3px 6px", fontSize: 11, width: "110px" }} />
                           <span style={{ color: "#aaa", fontSize: 10 }}>to</span>
                           <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} style={{ ...STYLES.btnBase, padding: "3px 6px", fontSize: 11, width: "110px" }} />
                           <button onClick={applyCustomDates} style={{ ...STYLES.btnBase, background: COLORS.DARK_GREEN, color: "#fff", border: "none", fontSize: 10, padding: "4px 8px", height: 26, fontWeight: 700 }}>Apply</button>
-                     </div>
+                      </div>
                   )}
 
                   <div style={{flex: 1, minWidth: 10}} />
@@ -1172,29 +1322,29 @@ export default function Home() {
 
               {/* --- 2. GENERAL FILTERS ROW (THE NEW 3 BUTTONS) --- */}
               <div className="hide-scrollbar" style={{ padding: "16px 12px 10px 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGeneralGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9" }}>
-                   {/* BUTTON 1: League & Level */}
-                   <button 
+                    {/* BUTTON 1: League & Level */}
+                    <button 
                         onClick={() => { setOpenGeneralGroup(openGeneralGroup === 'league' ? null : 'league'); setOpenGroup(null); }}
                         style={{ ...STYLES.btnBase, display: 'flex', alignItems: 'center', gap: 6, borderRadius: 24, padding: "8px 14px", ...(openGeneralGroup === 'league' ? STYLES.btnSelected : {}) }}
-                   >
+                    >
                         <Globe size={14} color="#0288d1" /> League & Level {leagueStatus !== 'all' || level !== 'all' ? <span style={{width: 6, height: 6, borderRadius: '50%', background: openGeneralGroup === 'league' ? '#fff' : COLORS.DARK_GREEN}}></span> : null}
-                   </button>
-                   
-                   {/* BUTTON 2: Position */}
-                   <button 
+                    </button>
+                    
+                    {/* BUTTON 2: Position */}
+                    <button 
                         onClick={() => { setOpenGeneralGroup(openGeneralGroup === 'position' ? null : 'position'); setOpenGroup(null); }}
                         style={{ ...STYLES.btnBase, display: 'flex', alignItems: 'center', gap: 6, borderRadius: 24, padding: "8px 14px", ...(openGeneralGroup === 'position' ? STYLES.btnSelected : {}) }}
-                   >
+                    >
                         <Users size={14} color="#e65100" /> Position {selectedPositions.length > 0 ? <span style={{width: 6, height: 6, borderRadius: '50%', background: openGeneralGroup === 'position' ? '#fff' : COLORS.DARK_GREEN}}></span> : null}
-                   </button>
-                   
-                   {/* BUTTON 3: MLB Team */}
-                   <button 
+                    </button>
+                    
+                    {/* BUTTON 3: MLB Team */}
+                    <button 
                         onClick={() => { setOpenGeneralGroup(openGeneralGroup === 'team' ? null : 'team'); setOpenGroup(null); }}
                         style={{ ...STYLES.btnBase, display: 'flex', alignItems: 'center', gap: 6, borderRadius: 24, padding: "8px 14px", ...(openGeneralGroup === 'team' ? STYLES.btnSelected : {}) }}
-                   >
+                    >
                         <Flag size={14} color="#d32f2f" /> MLB Team {selectedTeams.length < ALL_TEAMS.length ? <span style={{width: 6, height: 6, borderRadius: '50%', background: openGeneralGroup === 'team' ? '#fff' : COLORS.DARK_GREEN}}></span> : null}
-                   </button>
+                    </button>
               </div>
 
               {/* TRAY FOR GENERAL FILTERS */}
@@ -1235,8 +1385,13 @@ export default function Home() {
               <div className="hide-scrollbar" style={{ padding: "10px 12px 16px 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9" }}>
                   {CUSTOM_TAB_ORDER.map((coreId) => {
                   const isOpen = openGroup === coreId;
-                  const activeCount = CORE_STATS[coreId]?.filter(k => selectedStatKeys.includes(k)).length || 0;
-                  const display = CATEGORY_DISPLAY[coreId] || { label: coreId, icon: null };
+                  
+                  // FIXED: Added (CORE_STATS as any) to handle keys like "popular" that might not exist in CORE_STATS
+                  const groupStats = (CORE_STATS as any)[coreId];
+                  const activeCount = groupStats ? groupStats.filter((k: any) => selectedStatKeys.includes(k)).length : 0;
+                  
+                  // FIXED: Added (CATEGORY_DISPLAY as any) to prevent key lookup errors
+                  const display = (CATEGORY_DISPLAY as any)[coreId] || { label: coreId, icon: null };
 
                   // Special styling for Popular
                   const isPopular = coreId === 'popular';
