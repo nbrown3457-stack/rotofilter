@@ -1,6 +1,6 @@
 /* =============================================================================
    src/app/utils/playerAnalysis.ts
-   UPDATED: Now passes 'prior_stats' to the engine for Multi-Year Blending
+   UPDATED: Includes ESPN Sync Logic & Roster Map Integration
 ============================================================================= */
 
 import { STATS } from "../../config/stats"; 
@@ -50,7 +50,12 @@ export const getTrajectory = (p: any) => {
 };
 
 // --- CORE LOGIC ---
-export const enrichPlayerData = (p: any, dateRange: DateRangeOption) => {
+// UPDATED: Now accepts optional 'rosterMap' to override availability
+export const enrichPlayerData = (
+  p: any, 
+  dateRange: DateRangeOption, 
+  rosterMap?: { myTeamIds: string[], takenIds: string[] }
+) => {
   // SAFETY CHECK: Return basic structure if stats are missing
   if (!p.stats || Object.keys(p.stats).length === 0) {
       return { ...p, rotoScore: 0, dynaScore: 0, pointsScore: 0, rangeScore: 0, stats: {}, popupData: {} };
@@ -94,11 +99,7 @@ export const enrichPlayerData = (p: any, dateRange: DateRangeOption) => {
   // 3. DETERMINE TABLE DISPLAY STATS
   const displayStats = dateRange === 'pace_season' ? ps : s;
 
-  // 4. ✅ NEW SCORING ENGINE (Multi-Year Blended)
-  // scoreStats = The stats we want to GRADE (Pace or Actual)
-  // rawStats   = The stats we use to judge RELIABILITY (Always Actual 's')
-  // priorStats = The stats we use to FILL GAPS (2024 data)
-  
+  // 4. SCORING ENGINE (Multi-Year Blended)
   const scoreStats = dateRange === 'pace_season' ? ps : s;
   const rawStats = s; 
   const priorStats = p.prior_stats || {}; 
@@ -109,26 +110,101 @@ export const enrichPlayerData = (p: any, dateRange: DateRangeOption) => {
     const g = parseFloat(s.g || 1);
     const ip = parseFloat(s.ip || 0);
     const isStarter = p.position === 'SP' || (ip / g > 3.0);
-    
-    // Pass ALL context to the Pitcher Engine
     ratings = calculatePitcherRatings(scoreStats, rawStats, priorStats, age, isStarter);
   } else {
-    // Pass ALL context to the Hitter Engine
     ratings = calculateHitterRatings(scoreStats, rawStats, priorStats, age);
+  }
+
+  // 5. DETERMINING AVAILABILITY (ESPN / SYNC INTEGRATION)
+  let availability = p.availability || "AVAILABLE"; // Default to DB status
+
+  if (rosterMap && rosterMap.takenIds.length > 0) {
+      const pIdStr = p.id.toString();
+      if (rosterMap.myTeamIds.includes(pIdStr)) {
+          availability = "MY_TEAM";
+      } else if (rosterMap.takenIds.includes(pIdStr)) {
+          availability = "ROSTERED";
+      } else {
+          availability = "AVAILABLE"; // Explicitly mark as available if not in taken list
+      }
   }
 
   return { 
     ...p, 
     stats: displayStats,
+    availability, // Return the calculated availability
     popupData: {
         season: season,     
         prior: prior,       
         range: s            
     },
-    // Map the new engine results to your UI props
     rotoScore: ratings.roto, 
     dynaScore: ratings.dyna, 
     pointsScore: ratings.points,
-    rangeScore: ratings.overall // Overall is the new Range
+    rangeScore: ratings.overall 
   };
+};
+
+// --- ESPN MAPPING UTILITIES ---
+
+// Helper to clean names for fuzzy matching (e.g. "Ronald Acuna Jr." -> "ronaldacuna")
+const normalizeName = (name: string) => {
+  if (!name) return '';
+  return name
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove accents
+    .replace(/[^a-z]/g, '') // Remove non-letters (spaces, dots, hyphens)
+    .replace(/jr$/, '')
+    .replace(/sr$/, '')
+    .replace(/ii$/, '')
+    .replace(/iii$/, '');
+};
+
+/**
+ * Maps raw ESPN roster data to your app's MLB Player IDs.
+ * Returns lists of IDs that are taken or owned by the user.
+ */
+export const processEspnData = (espnData: any, allPlayers: any[], myTeamName?: string) => {
+  const takenIds: string[] = [];
+  const myTeamIds: string[] = [];
+  const teamsMap: Record<string, string> = {}; // MlbID -> EspnTeamName
+
+  // 1. Index your existing players by normalized name for O(1) lookup
+  const playerMap = new Map();
+  allPlayers.forEach(p => {
+    if (p.name) {
+      playerMap.set(normalizeName(p.name), p.id);
+    }
+  });
+
+  // 2. Loop through ESPN data
+  if (espnData && espnData.teams) {
+    espnData.teams.forEach((team: any) => {
+      // Determine if this is "My Team"
+      // (For now we match loosely on name, or just skip if myTeamName is blank)
+      const isMyTeam = myTeamName && (
+        normalizeName(team.name) === normalizeName(myTeamName) || 
+        normalizeName(team.location + team.nickname) === normalizeName(myTeamName)
+      );
+
+      const teamNameDisplay = team.name || `${team.location} ${team.nickname}`;
+
+      team.roster?.entries?.forEach((entry: any) => {
+        const espnPlayer = entry.playerPoolEntry.player;
+        const mappedId = playerMap.get(normalizeName(espnPlayer.fullName));
+
+        if (mappedId) {
+          const idStr = mappedId.toString();
+          takenIds.push(idStr);
+          teamsMap[idStr] = teamNameDisplay;
+          
+          if (isMyTeam) {
+            myTeamIds.push(idStr);
+          }
+        }
+      });
+    });
+  }
+
+  return { takenIds, myTeamIds, teamsMap };
 };

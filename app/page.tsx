@@ -3,7 +3,10 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/app/utils/supabase/client"; 
 import { useRouter } from "next/navigation"; 
-import { Newspaper, Globe, Users, Flag, X, Lightbulb, Flame, Dna, Wrench, ChevronDown, Hammer } from "lucide-react"; 
+import { 
+  Newspaper, Globe, Users, Flag, X, Lightbulb, Flame, Dna, Wrench, ChevronDown, Hammer,
+  Zap, TrendingUp, TrendingDown, Shield, Target, Wind, Thermometer, Activity, Percent, Briefcase 
+} from "lucide-react"; 
 
 /* --- 1. COMPONENTS --- */
 import { PlayerDetailPopup } from "../components/PlayerDetailPopup";
@@ -26,7 +29,8 @@ import { STATS, type StatKey } from "../config/stats";
 import { 
   getTools, 
   getTrajectory, 
-  enrichPlayerData, 
+  enrichPlayerData,
+  processEspnData, // <--- CHANGE 1: Added Import
   type DateRangeOption 
 } from "./utils/playerAnalysis";
 
@@ -106,6 +110,70 @@ const PITCHER_STATS = [
   'extension', 'release_point_xyz', 'putaway_pct', 'gb_pct_pitch', 'xwoba_pitch',
   'arm_value', 'arm_strength', 'fielding_runs' 
 ];
+
+/* --- NEW QUICK FILTER SCENARIOS --- */
+const QUICK_SCENARIOS = [
+    { 
+      id: "power_surge", label: "Power Surge", icon: Flame, color: "#d32f2f", 
+      config: { pos: BATTER_POSITIONS, stats: ["iso", "hr", "slg"], thresholds: { iso: 0.250 }, dateRange: "last_30" } 
+    },
+    { 
+      id: "speed_demon", label: "Speed Demons", icon: Wind, color: "#fbc02d", 
+      config: { pos: BATTER_POSITIONS, stats: ["sprint_speed", "sb", "bolts"], thresholds: { sprint_speed: 29 }, dateRange: "season_curr" } 
+    },
+    { 
+      id: "unlucky_bats", label: "Unlucky Bats", icon: Dna, color: "#7b1fa2", 
+      config: { pos: BATTER_POSITIONS, stats: ["xwoba", "woba", "avg", "xba"], thresholds: { xwoba: 0.350, avg: 0.240 }, dateRange: "season_curr" } 
+    },
+    { 
+      id: "contact_kings", label: "Contact Kings", icon: Target, color: "#1976d2", 
+      config: { pos: BATTER_POSITIONS, stats: ["contact_pct", "k_pct", "avg"], thresholds: { contact_pct: 85, k_pct: 12 }, goodDirection: "lower", dateRange: "season_curr" } 
+    },
+    { 
+      id: "barrel_party", label: "Barrel Party", icon: Hammer, color: "#e64a19", 
+      config: { pos: BATTER_POSITIONS, stats: ["barrel_pct", "avg", "hard_hit_pct"], thresholds: { barrel_pct: 12 }, dateRange: "season_curr" } 
+    },
+    { 
+      id: "saves_spike", label: "Saves Spike", icon: Shield, color: "#388e3c", 
+      config: { pos: ["RP"], stats: ["sv", "era", "k_pct"], thresholds: { sv: 1 }, dateRange: "last_30" } 
+    },
+    { 
+      id: "whiff_artists", label: "Whiff Artists", icon: Zap, color: "#0288d1", 
+      config: { pos: PITCHER_POSITIONS, stats: ["whiff_pct", "k_pct", "swstr_pct"], thresholds: { whiff_pct: 30 }, dateRange: "season_curr" } 
+    },
+    { 
+      id: "fireballers", label: "Fireballers", icon: Thermometer, color: "#d32f2f", 
+      config: { pos: PITCHER_POSITIONS, stats: ["velocity", "k_pct"], thresholds: { velocity: 97 }, dateRange: "season_curr" } 
+    },
+    { 
+      id: "trending_up", label: "Heating Up", icon: TrendingUp, color: "#4caf50", 
+      config: { pos: BATTER_POSITIONS, stats: ["wrc_plus", "ops", "avg"], thresholds: { wrc_plus: 140 }, dateRange: "last_7" } 
+    },
+    { 
+      id: "cold_streak", label: "Ice Cold", icon: TrendingDown, color: "#0d47a1", 
+      config: { pos: BATTER_POSITIONS, stats: ["wrc_plus", "avg", "k_pct"], thresholds: { wrc_plus: 60 }, goodDirection: "lower", dateRange: "last_14" } 
+    },
+    { 
+      id: "free_passes", label: "Walk Machines", icon: Briefcase, color: "#f57c00", 
+      config: { pos: BATTER_POSITIONS, stats: ["bb_pct", "obp", "chase_pct"], thresholds: { bb_pct: 12 }, dateRange: "season_curr" } 
+    },
+    { 
+      id: "rookie_watch", label: "Rookie Watch", icon: Lightbulb, color: "#8e24aa", 
+      config: { level: "rookies", stats: ["wrc_plus", "war", "avg"], thresholds: {}, dateRange: "season_curr" } 
+    },
+    { 
+      id: "stuff_plus", label: "Stuff+ Gods", icon: Activity, color: "#c2185b", 
+      config: { pos: PITCHER_POSITIONS, stats: ["stuff_plus", "k_pct"], thresholds: { stuff_plus: 110 }, dateRange: "season_curr" } 
+    },
+    { 
+      id: "soft_contact", label: "Soft Contact", icon: Percent, color: "#00796b", 
+      config: { pos: PITCHER_POSITIONS, stats: ["hard_hit_pct", "avg", "era"], thresholds: { hard_hit_pct: 30 }, goodDirection: "lower", dateRange: "season_curr" } 
+    },
+    { 
+      id: "prospects", label: "Top Prospects", icon: Globe, color: "#5d4037", 
+      config: { level: "prospects", stats: ["age", "eta", "scouting_grade"], thresholds: {}, dateRange: "season_curr" } 
+    }
+  ];
 
 /* --- STYLES OBJECTS --- */
 const STYLES = {
@@ -340,7 +408,7 @@ const PlayerAvatar = ({ team, jerseyNumber, hasNews, headline, availability, isS
         
         {isSelected && (
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(27, 94, 32, 0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, color: 'white', fontSize: '18px' }}>
-             <Icons.Check />
+              <Icons.Check />
           </div>
         )}
       </div>
@@ -381,17 +449,17 @@ const ToolsPopup = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void 
           animation: 'slideUpPopup 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
         }}
       >
-         <div style={{ fontSize: 10, fontWeight: 800, color: '#666', textTransform: 'uppercase', padding: '8px 12px' }}>Tools Menu</div>
-         
-         <a href="#" className="tools-dropdown-item" style={{ borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span className="icon-fix-md"><Icons.Closers /></span> Closer Depth
-         </a>
-         <a href="#" className="tools-dropdown-item" style={{ borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span className="icon-fix-md"><Icons.Prospects /></span> Prospects
-         </a>
-         <a href="#" className="tools-dropdown-item" style={{ borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span className="icon-fix-md"><Icons.Trade /></span> Trade Calculator
-         </a>
+          <div style={{ fontSize: 10, fontWeight: 800, color: '#666', textTransform: 'uppercase', padding: '8px 12px' }}>Tools Menu</div>
+          
+          <a href="#" className="tools-dropdown-item" style={{ borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+             <span className="icon-fix-md"><Icons.Closers /></span> Closer Depth
+          </a>
+          <a href="#" className="tools-dropdown-item" style={{ borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+             <span className="icon-fix-md"><Icons.Prospects /></span> Prospects
+          </a>
+          <a href="#" className="tools-dropdown-item" style={{ borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+             <span className="icon-fix-md"><Icons.Trade /></span> Trade Calculator
+          </a>
       </div>
     </div>
   );
@@ -411,6 +479,8 @@ export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [isUserPaid, setIsUserPaid] = useState(true); 
   const [savedFilters, setSavedFilters] = useState<any[]>([]);
+  // CHANGE 2: Added State for Roster Map
+  const [rosterMap, setRosterMap] = useState<{myTeamIds: string[], takenIds: string[]}>({ myTeamIds: [], takenIds: [] });
 
   // --- STATE: FILTERS (DEFAULT STATS SET HERE) ---
   const [openGroup, setOpenGroup] = useState<CoreId | "popular" | null>(null); 
@@ -429,7 +499,7 @@ export default function Home() {
   const [dateRange, setDateRange] = useState<DateRangeOption>("season_curr");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
-    
+  
   // --- STATE: UI ---
   const [selectedPlayer, setSelectedPlayer] = useState<any | null>(null);
   const [compareList, setCompareList] = useState<string[]>([]);
@@ -446,6 +516,9 @@ export default function Home() {
   
   // NEW STATE FOR TOOLS MENU
   const [isToolsOpen, setIsToolsOpen] = useState(false);
+
+  // NEW STATE FOR ACTIVE SCENARIO HIGHLIGHT
+  const [activeScenario, setActiveScenario] = useState<string | null>(null);
     
   const resultsTableRef = useRef<HTMLDivElement>(null);
 
@@ -530,6 +603,7 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // CHANGE 3: Updated fetchPlayers to read from Local Storage and populate rosterMap
   const fetchPlayers = useCallback(async () => {
     setLoading(true);
     try {
@@ -562,6 +636,20 @@ export default function Home() {
       
       const data = await response.json();
       const safeList = Array.isArray(data) ? data : (data.players || []);
+      
+      // --- NEW: ESPN LOCAL STORAGE CHECK ---
+      if (typeof window !== 'undefined') {
+        const provider = localStorage.getItem('active_league_provider');
+        if (provider === 'ESPN') {
+           const rawEspn = localStorage.getItem('espn_raw_data');
+           if (rawEspn) {
+             const processed = processEspnData(JSON.parse(rawEspn), safeList, "My Team"); // Replace "My Team" with actual name later if needed
+             setRosterMap({ myTeamIds: processed.myTeamIds, takenIds: processed.takenIds });
+           }
+        }
+      }
+      // -------------------------------------
+
       setPlayers(safeList); 
       
     } catch (error) {
@@ -588,9 +676,10 @@ export default function Home() {
   const handleGlobalReset = () => {
     setOpenGroup(null);
     setOpenGeneralGroup(null);
+    setActiveScenario(null); // Clear active scenario
     setSelectedPositions([]); 
-    // CHANGED: Default Stats to Batting Only + Advanced
-    setSelectedStatKeys(['hr', 'sb', 'avg', 'ops', 'wrc_plus', 'barrel_pct']); 
+    // UPDATED: Completely clear all stats on reset (was previously hitting stats)
+    setSelectedStatKeys([]); 
     setLevel("all"); setLeagueStatus("all");
     setSelectedTeams([...ALL_TEAMS]); setSearchQuery(""); setStatThresholds({}); setMinTools(0);
     setActivePlayerId(null); setDateRange("season_curr"); setCustomStart(""); setCustomEnd(""); setCompareList([]);
@@ -599,8 +688,15 @@ export default function Home() {
 
   const scrollToResults = () => { if (resultsTableRef.current) resultsTableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
 
-  const applyQuickFilter = (preset: any) => {
+  const applyQuickFilter = (preset: any, scenarioId: string | null = null) => {
+    // TOGGLE LOGIC: If clicking the same scenario again, treat it as a reset
+    if (scenarioId && activeScenario === scenarioId) {
+        handleGlobalReset();
+        return;
+    }
+
     handleGlobalReset();
+    if (scenarioId) setActiveScenario(scenarioId); // Set active scenario state
     if (preset.pos) setSelectedPositions(preset.pos);
     if (preset.stats) setSelectedStatKeys(preset.stats);
     if (preset.thresholds) setStatThresholds(preset.thresholds);
@@ -624,9 +720,9 @@ export default function Home() {
         stats: selectedStatKeys, 
         thresholds: statThresholds, 
         minTools, 
-        level,
-        dateRange,
-        customStart: dateRange === 'custom' ? customStart : null,
+        level, 
+        dateRange, 
+        customStart: dateRange === 'custom' ? customStart : null, 
         customEnd: dateRange === 'custom' ? customEnd : null
     };
 
@@ -679,7 +775,8 @@ export default function Home() {
 
   // --- FILTERED DATA MEMO ---
   const filteredPlayers = useMemo(() => {
-    const scoredData = players.map((p: any) => enrichPlayerData(p, dateRange));
+    // CHANGE 4: Passing rosterMap to enrichPlayerData
+    const scoredData = players.map((p: any) => enrichPlayerData(p, dateRange, rosterMap));
 
     return scoredData.filter((p: any) => {
     const hasPitchingStats = selectedStatKeys.some(k => PITCHER_STATS.includes(k));
@@ -735,11 +832,11 @@ export default function Home() {
       }
       return sortDir === "asc" ? valA - valB : valB - valA;
     });
-  }, [players, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange]);
+  }, [players, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange, rosterMap]); // Added rosterMap to deps
 
 
   /* =============================================================================
-       RENDER FUNCTIONS
+        RENDER FUNCTIONS
    ============================================================================= */
 
   const renderStatFilterTray = () => {
@@ -839,7 +936,7 @@ export default function Home() {
                             {[
                                 { key: "all", label: "All" },
                                 { key: "available", label: "Free Agents" },    
-                                { key: "my_team", label: "My Team" },                          
+                                { key: "my_team", label: "My Team" },                            
                                 { key: "rostered", label: "Rostered" }         
                             ].map((opt) => { 
                                 const isLocked = !isUserPaid && opt.key !== "all"; 
@@ -926,6 +1023,46 @@ export default function Home() {
         </div>
     );
   };
+
+  const renderQuickScenarios = () => (
+    <div className="hide-scrollbar" style={{ 
+      padding: "12px 12px 4px 12px", 
+      display: "flex", 
+      gap: 10, 
+      overflowX: "auto", 
+      whiteSpace: "nowrap", 
+      background: "#f9f9f9",
+      borderBottom: "1px solid #eee"
+    }}>
+      {QUICK_SCENARIOS.map((s) => {
+        const isActive = activeScenario === s.id;
+        return (
+          <button
+            key={s.id}
+            onClick={() => applyQuickFilter(s.config, s.id)}
+            style={{
+              ...STYLES.btnBase,
+              padding: "6px 12px",
+              borderRadius: 20,
+              fontSize: 11,
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              background: isActive ? s.color : "#fff",
+              color: isActive ? "#fff" : "#444",
+              border: isActive ? `1px solid ${s.color}` : "1px solid #e0e0e0",
+              boxShadow: isActive ? `0 4px 10px ${s.color}40` : "0 2px 4px rgba(0,0,0,0.03)",
+              transition: "all 0.2s ease"
+            }}
+          >
+            <s.icon size={14} />
+            {s.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 
   const renderCompareModal = () => {
     if (!isCompareOpen) return null;
@@ -1045,7 +1182,7 @@ export default function Home() {
             {/* DESKTOP TOOLS DROPDOWN */}
               <div className="nav-tools-container" style={{ position: 'relative' }}>
                 <button className="nav-link" style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                   Tools <ChevronDown size={12} />
+                    Tools <ChevronDown size={12} />
                 </button>
                 <div className="tools-dropdown-menu">
                    <a href="#" className="tools-dropdown-item" style={{ display: 'flex', alignItems: 'center' }}>
@@ -1380,6 +1517,9 @@ export default function Home() {
                       })}
                   </div>
               )}
+
+              {/* --- NEW: QUICK SCENARIOS --- */}
+              {renderQuickScenarios()}
 
               {/* --- 3. STAT CATEGORIES --- */}
               <div className="hide-scrollbar" style={{ padding: "10px 12px 16px 12px", display: "flex", gap: 8, overflowX: "auto", whiteSpace: "nowrap", flexWrap: "nowrap", borderBottom: openGroup ? "none" : "1px solid #e0e0e0", background: "#f9f9f9" }}>
