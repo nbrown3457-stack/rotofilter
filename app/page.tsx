@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/app/utils/supabase/client"; 
 import { useRouter } from "next/navigation"; 
-import { Newspaper, Globe, Users, Flag, X, Lightbulb, Flame } from "lucide-react";
+import { Newspaper, Globe, Users, Flag, X, Lightbulb, Flame, Dna } from "lucide-react"; // Added Dna icon
 
 /* --- 1. COMPONENTS --- */
 import { PlayerDetailPopup } from "../components/PlayerDetailPopup";
@@ -159,7 +159,7 @@ const CATEGORY_DISPLAY: Record<string, { label: string; icon: any }> = {
 const GlobalStyles = () => (
   <style dangerouslySetInnerHTML={{ __html: `
     @import url('https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap');
-    @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@700&display=swap'); /* Added for DNA font */
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap');
     
     @keyframes pulse-ring { 0% { transform: scale(0.33); opacity: 1; } 80%, 100% { opacity: 0; } }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -311,11 +311,11 @@ export default function Home() {
   const [savedFilters, setSavedFilters] = useState<any[]>([]);
 
   // --- STATE: FILTERS (DEFAULT STATS SET HERE) ---
-  const [openGroup, setOpenGroup] = useState<CoreId | null>(null); 
+  const [openGroup, setOpenGroup] = useState<CoreId | "popular" | null>(null); 
   const [openGeneralGroup, setOpenGeneralGroup] = useState<GeneralGroup>(null);
   const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
-  // CHANGED: Default stats are now populated
-  const [selectedStatKeys, setSelectedStatKeys] = useState<StatKey[]>(['hr', 'sb', 'avg', 'era', 'whip', 'so']);
+  // CHANGED: Batting Stats Only + Advanced
+  const [selectedStatKeys, setSelectedStatKeys] = useState<StatKey[]>(['hr', 'sb', 'avg', 'ops', 'wrc_plus', 'barrel_pct']);
   const [level, setLevel] = useState<Level>("all");
   const [leagueStatus, setLeagueStatus] = useState<LeagueStatus>("all");
   const [selectedTeams, setSelectedTeams] = useState<TeamAbbr[]>([...ALL_TEAMS]);
@@ -392,15 +392,16 @@ export default function Home() {
     };
     checkUser();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // FIXED: Only clear data if explicitly SIGNED_OUT, preventing accidental wipe on refresh
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       setIsUserPaid(true);
       
       if (currentUser) {
         fetchSavedFilters(currentUser); 
-      } else {
-        // FORCE CLEANUP ON LOGOUT
+      } else if (event === 'SIGNED_OUT') {
+        // FORCE CLEANUP ON LOGOUT ONLY
         document.cookie = "active_team_key=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
         document.cookie = "active_league_key=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
         setPlayers([]); 
@@ -469,8 +470,8 @@ export default function Home() {
     setOpenGroup(null);
     setOpenGeneralGroup(null);
     setSelectedPositions([]); 
-    // CHANGED: Reset to default stats
-    setSelectedStatKeys(['hr', 'sb', 'avg', 'era', 'whip', 'so']); 
+    // CHANGED: Default Stats to Batting Only + Advanced
+    setSelectedStatKeys(['hr', 'sb', 'avg', 'ops', 'wrc_plus', 'barrel_pct']); 
     setLevel("all"); setLeagueStatus("all");
     setSelectedTeams([...ALL_TEAMS]); setSearchQuery(""); setStatThresholds({}); setMinTools(0);
     setActivePlayerId(null); setDateRange("season_curr"); setCustomStart(""); setCustomEnd(""); setCompareList([]);
@@ -617,7 +618,8 @@ export default function Home() {
     });
   }, [players, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange]);
 
-/* =============================================================================
+
+  /* =============================================================================
        RENDER FUNCTIONS
    ============================================================================= */
 
@@ -994,7 +996,7 @@ export default function Home() {
       </div>
 
       <div className="mobile-bottom-nav">
-        {[{ id: "filters", label: "Filters", Icon: Icons.Filters }, { id: "rosters", label: "Rosters", Icon: Icons.Rosters }, { id: "closers", label: "Closers", Icon: Icons.Closers }, { id: "prospects", label: "Prospects", Icon: Icons.Prospects }, { id: "grade", label: "Grade", Icon: Icons.Grade }, { id: "trade", label: "Trade", Icon: Icons.Trade }, { id: "community", label: "Community", Icon: Icons.Community }, { id: "sync", label: "Sync", Icon: Icons.Sync }].map((item) => (
+        {[{ id: "filters", label: "Filters", Icon: Icons.Filters }, { id: "rosters", label: "DNA", Icon: Dna }, { id: "closers", label: "Closers", Icon: Icons.Closers }, { id: "prospects", label: "Prospects", Icon: Icons.Prospects }, { id: "grade", label: "Grade", Icon: Icons.Grade }, { id: "trade", label: "Trade", Icon: Icons.Trade }, { id: "community", label: "Community", Icon: Icons.Community }, { id: "sync", label: "Sync", Icon: Icons.Sync }].map((item) => (
           <a 
             key={item.id} 
             href={item.id === 'rosters' ? '/roster' : '#'}
@@ -1005,8 +1007,10 @@ export default function Home() {
               if(item.id === 'sync') setIsSyncModalOpen(true); 
             }} 
             className={`mobile-nav-item ${activeTab === item.id ? "active" : ""}`}
+            style={item.id === 'rosters' ? { color: '#9c27b0' } : {}}
           >
-            <item.Icon />{item.label}
+            <item.Icon size={item.id === 'rosters' ? 22 : 18} />
+            <span style={item.id === 'rosters' ? { fontWeight: 900, fontSize: 10 } : {}}>{item.label}</span>
           </a>
         ))}
       </div>
