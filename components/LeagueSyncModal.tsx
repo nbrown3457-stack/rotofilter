@@ -1,15 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, Info } from "lucide-react"; // Using icons from your main file
-import { processEspnData } from "@/app/utils/playerAnalysis";
+import { X, Info } from "lucide-react"; 
 
 interface LeagueSyncModalProps {
   onClose?: () => void;
 }
 
 export default function LeagueSyncModal({ onClose }: LeagueSyncModalProps) {
-  // State for switching between providers
   const [provider, setProvider] = useState<'YAHOO' | 'ESPN'>('YAHOO');
 
   // ESPN Form State
@@ -35,12 +33,17 @@ export default function LeagueSyncModal({ onClose }: LeagueSyncModalProps) {
 
       if (!res.ok) throw new Error(data.error || 'Failed to sync with ESPN');
 
-      // 2. Success! Save raw data to LocalStorage for now
-      // (In Phase 5, we will read this in your main page)
-      localStorage.setItem('espn_raw_data', JSON.stringify(data.data));
-      localStorage.setItem('active_league_provider', 'ESPN');
+      // 2. Success! Save raw data to LocalStorage
+      // CRITICAL FIX: Ensure we are saving the 'rawData' property we just added to the API
+      if (data.rawData) {
+          localStorage.setItem('espn_raw_data', JSON.stringify(data.rawData));
+      }
       
-      // 3. Force a reload so the main page picks up the new "Provider" setting
+      // Save metadata for the context to pick up
+      localStorage.setItem('active_league_provider', 'ESPN');
+      localStorage.setItem('active_team_id', `e.${leagueId}.${data.rawData?.teams?.[0]?.id || 1}`);
+
+      // 3. Force a reload so the main page picks up the new data
       window.location.reload(); 
       
       if (onClose) onClose();

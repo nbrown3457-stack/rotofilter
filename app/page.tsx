@@ -30,6 +30,7 @@ import {
   getTools, 
   getTrajectory, 
   enrichPlayerData,
+  processEspnData, // <--- FIX 1: ADDED THIS IMPORT
   type DateRangeOption 
 } from "./utils/playerAnalysis";
 
@@ -765,8 +766,16 @@ export default function Home() {
 
   // --- FILTERED DATA MEMO ---
   const filteredPlayers = useMemo(() => {
-    // CHANGE 4: Passing rosterMap to enrichPlayerData
-    const scoredData = players.map((p: any) => enrichPlayerData(p, dateRange));
+    // FIX 2: Generate Roster Map correctly so "My Team" filter works
+    let rosterMap = undefined;
+    if (activeTeam) {
+        const teamName = (activeTeam as any).name || 
+                         ((activeTeam as any).location && (activeTeam as any).nickname ? `${(activeTeam as any).location} ${(activeTeam as any).nickname}` : "My Team");
+        // We pass activeTeam assuming it holds the team data structure
+        rosterMap = processEspnData(activeTeam, players, teamName);
+    }
+
+    const scoredData = players.map((p: any) => enrichPlayerData(p, dateRange, rosterMap));
 
     return scoredData.filter((p: any) => {
     const hasPitchingStats = selectedStatKeys.some(k => PITCHER_STATS.includes(k));
@@ -822,7 +831,7 @@ export default function Home() {
       }
       return sortDir === "asc" ? valA - valB : valB - valA;
     });
-  }, [players, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange]); // Added rosterMap to deps
+  }, [players, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange, activeTeam]); // Added activeTeam to deps
 
 
   /* =============================================================================
@@ -925,8 +934,8 @@ export default function Home() {
                         <div style={{ display: "flex", gap: 6, flexWrap: 'wrap' }}>
                             {[
                                 { key: "all", label: "All" },
-                                { key: "available", label: "Free Agents" },     
-                                { key: "my_team", label: "My Team" },                                   
+                                { key: "available", label: "Free Agents" },      
+                                { key: "my_team", label: "My Team" },                                    
                                 { key: "rostered", label: "Rostered" }          
                             ].map((opt) => { 
                                 const isLocked = !isUserPaid && opt.key !== "all"; 
@@ -1142,7 +1151,7 @@ export default function Home() {
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span className="nav-logo-text" style={{ fontWeight: 900, fontSize: '20px', color: '#fff', letterSpacing: '-0.5px', lineHeight: '1' }}>ROTO<span style={{ color: '#4caf50' }}>FILTER</span></span>
                 
-                {/* --- TEAM NAME WITH EDGY FONT --- */}
+                {/* --- FIX 3: TEAM NAME DISPLAY --- */}
                 {user && activeTeam ? (
                   <span style={{ 
                     color: '#FFD700', // Lightning Yellow
@@ -1153,7 +1162,9 @@ export default function Home() {
                     lineHeight: '1',
                     textShadow: '0 0 5px rgba(255, 215, 0, 0.4)'
                   }}>
-                    {(activeTeam as any).name || (activeTeam as any).team_name || "My Team"}
+                    {/* Handles both 'name' and 'location + nickname' structures */}
+                    {(activeTeam as any).name || 
+                     ((activeTeam as any).location && (activeTeam as any).nickname ? `${(activeTeam as any).location} ${(activeTeam as any).nickname}` : "My Team")}
                   </span>
                 ) : (
                   <span className="nav-logo-subtext" style={{ fontSize: '10px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', lineHeight: '1' }}>Data Driving Dominance</span>
