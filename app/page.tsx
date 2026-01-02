@@ -30,7 +30,7 @@ import {
   getTools, 
   getTrajectory, 
   enrichPlayerData,
-  processEspnData, // <--- FIX 1: ADDED THIS IMPORT
+  processEspnData, // <--- IMPORT CONFIRMED
   type DateRangeOption 
 } from "./utils/playerAnalysis";
 
@@ -769,10 +769,15 @@ export default function Home() {
     // FIX 2: Generate Roster Map correctly so "My Team" filter works
     let rosterMap = undefined;
     if (activeTeam) {
-        const teamName = (activeTeam as any).name || 
-                         ((activeTeam as any).location && (activeTeam as any).nickname ? `${(activeTeam as any).location} ${(activeTeam as any).nickname}` : "My Team");
-        // We pass activeTeam assuming it holds the team data structure
-        rosterMap = processEspnData(activeTeam, players, teamName);
+        const at = activeTeam as any;
+        const teamName = at.name || 
+                         (at.location && at.nickname ? `${at.location} ${at.nickname}` : "My Team");
+        
+        // CRITICAL FIX: The raw ESPN data is inside 'league_data', not at the top level
+        // We check for 'league_data' first. If not found, we fallback to 'activeTeam' (for Yahoo/Legacy)
+        const rawDataForProcessor = at.league_data ? at.league_data : at;
+        
+        rosterMap = processEspnData(rawDataForProcessor, players, teamName);
     }
 
     const scoredData = players.map((p: any) => enrichPlayerData(p, dateRange, rosterMap));
@@ -1151,7 +1156,7 @@ export default function Home() {
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span className="nav-logo-text" style={{ fontWeight: 900, fontSize: '20px', color: '#fff', letterSpacing: '-0.5px', lineHeight: '1' }}>ROTO<span style={{ color: '#4caf50' }}>FILTER</span></span>
                 
-                {/* --- FIX 3: TEAM NAME DISPLAY --- */}
+                {/* --- TEAM NAME WITH EDGY FONT --- */}
                 {user && activeTeam ? (
                   <span style={{ 
                     color: '#FFD700', // Lightning Yellow
