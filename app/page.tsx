@@ -608,14 +608,18 @@ export default function Home() {
       const params = new URLSearchParams();
       
       if (activeTeam) {
-          // PERSISTENCE FIX: Update local storage when we successfully use a team
+          // PERSISTENCE: Always update local storage so the session remembers your team
           if(typeof window !== 'undefined') localStorage.setItem('active_team_id', activeTeam.team_key);
           
-          // Send BOTH IDs and provider. Backend will decide which table to check.
-          params.append('league_id', activeTeam.league_key);
-          params.append('team_id', activeTeam.team_key);
-          if (activeTeam.provider) {
-             params.append('provider', activeTeam.provider);
+          // CRITICAL FIX: Only send league IDs to the backend if it is NOT ESPN.
+          // For ESPN, we want the backend to return the FULL Master List (no filtering),
+          // so we can filter it securely in the browser using the data we just synced.
+          if (activeTeam.provider !== 'ESPN') {
+             params.append('league_id', activeTeam.league_key);
+             params.append('team_id', activeTeam.team_key);
+             if (activeTeam.provider) {
+                params.append('provider', activeTeam.provider);
+             }
           }
       }
       
@@ -649,13 +653,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [leagueScope, activeTeam, search, dateRange, customStart, customEnd, selectedPositions]); 
-
-  useEffect(() => {
-    if (dateRange !== 'custom' || (customStart && customEnd)) {
-      fetchPlayers();
-    }
-  }, [fetchPlayers, dateRange, customStart, customEnd]);
+  }, [leagueScope, activeTeam, search, dateRange, customStart, customEnd, selectedPositions]);
 
   // --- ACTIONS ---
   const applyCustomDates = () => {
