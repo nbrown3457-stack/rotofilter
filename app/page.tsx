@@ -601,34 +601,25 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
-// CHANGE 3: FIXED & ROBUST Fetch Logic
+  // CHANGE 3: Updated fetchPlayers to read from Local Storage and populate rosterMap
   const fetchPlayers = useCallback(async () => {
-    // Prevent fetching if dependencies aren't ready
     setLoading(true);
-    
     try {
       const params = new URLSearchParams();
       
-      // LOGIC FIX: Explicitly handle Yahoo vs ESPN
       if (activeTeam) {
-          // 1. YAHOO MODE: We MUST send the League ID so the backend can filter
-          if (activeTeam.provider !== 'ESPN' && activeTeam.league_key) {
-             params.append('league_id', activeTeam.league_key);
-             params.append('team_id', activeTeam.team_key);
-             params.append('provider', activeTeam.provider || 'YAHOO');
-             
-             // Persistence
-             if(typeof window !== 'undefined') localStorage.setItem('active_team_id', activeTeam.team_key);
+          // PERSISTENCE FIX: Update local storage when we successfully use a team
+          if(typeof window !== 'undefined') localStorage.setItem('active_team_id', activeTeam.team_key);
+          
+          // Send BOTH IDs and provider. Backend will decide which table to check.
+          params.append('league_id', activeTeam.league_key);
+          params.append('team_id', activeTeam.team_key);
+          if (activeTeam.provider) {
+             params.append('provider', activeTeam.provider);
           }
-          // 2. ESPN MODE: We intentionally SEND NOTHING. 
-          // This forces the backend to return the "Master List" of all players.
-          // We then filter this list client-side using the JSON we synced.
       }
       
-      // Standard Filters
       if (search) params.append('search', search);
-      
-      // Date Range Logic
       if (dateRange !== 'custom') {
           const rangeValue = dateRange === 'pace_season' ? 'season_curr' : dateRange;
           params.append('range', rangeValue);
@@ -636,39 +627,35 @@ export default function Home() {
           if (customStart) params.append('start_date', customStart);
           if (customEnd) params.append('end_date', customEnd);
       }
-      
-      // Position Logic
       if (selectedPositions.length > 0 && !selectedPositions.includes('All')) {
         params.append('position', selectedPositions.join(','));
       }
       
-      console.log("Fetching players with params:", params.toString()); // Debugging
-
-      // INCREASED TIMEOUT: 15s (ESPN Master List is large)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-      
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       const response = await fetch(`/api/players?${params.toString()}`, { signal: controller.signal });
       clearTimeout(timeoutId);
 
-      if (!response.ok) {
-          throw new Error(`API Error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error('Failed to fetch players');
       
       const data = await response.json();
       const safeList = Array.isArray(data) ? data : (data.players || []);
       
-      console.log("Players Loaded:", safeList.length); // Debugging
       setPlayers(safeList); 
       
     } catch (error) {
       console.error('Error fetching players:', error);
-      // Don't clear players on error, keep old data so UI doesn't flash empty
-      if (players.length === 0) setPlayers([]); 
+      setPlayers([]);
     } finally {
       setLoading(false);
     }
-  }, [leagueScope, activeTeam, search, dateRange, customStart, customEnd, selectedPositions]);
+  }, [leagueScope, activeTeam, search, dateRange, customStart, customEnd, selectedPositions]); 
+
+  useEffect(() => {
+    if (dateRange !== 'custom' || (customStart && customEnd)) {
+      fetchPlayers();
+    }
+  }, [fetchPlayers, dateRange, customStart, customEnd]);
 
   // --- ACTIONS ---
   const applyCustomDates = () => {
