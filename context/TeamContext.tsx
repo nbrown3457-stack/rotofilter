@@ -2,18 +2,20 @@
 
 import { createContext, useContext, useState, useEffect } from 'react';
 import Cookies from 'js-cookie';
+import { createClient } from '@/app/utils/supabase/client';
 
 interface Team {
   team_key: string;
   team_name: string;
   league_key: string;
   seasonYear: number;
+  provider: 'YAHOO' | 'ESPN';
 }
 
 interface TeamContextType {
   activeTeam: Team | null;
   setActiveTeam: (team: Team) => Promise<void>;
-  refreshLeague: () => Promise<void>; // <--- EXPOSING THIS
+  refreshLeague: () => Promise<void>;
   teams: Team[];
   loading: boolean;
 }
@@ -24,26 +26,60 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
   const [teams, setTeams] = useState<Team[]>([]);
   const [activeTeam, setActiveTeamState] = useState<Team | null>(null);
   const [loading, setLoading] = useState(true);
+  const supabase = createClient();
 
   useEffect(() => {
     async function fetchTeams() {
+      setLoading(true);
+      let allTeams: Team[] = [];
+
       try {
-        const res = await fetch('/api/yahoo/my-teams');
-        if (res.ok) {
-            const data = await res.json();
-            if (data.success && data.teams.length > 0) {
-              const sortedTeams = data.teams.sort((a: Team, b: Team) => b.seasonYear - a.seasonYear);
-              setTeams(sortedTeams);
+        // 1. Fetch Yahoo Teams (Existing API)
+        const yahooRes = await fetch('/api/yahoo/my-teams');
+        if (yahooRes.ok) {
+            const data = await yahooRes.json();
+            if (data.success && data.teams) {
+                // Tag them as Yahoo
+                const yahooTeams = data.teams.map((t: any) => ({ ...t, provider: 'YAHOO' }));
+                allTeams = [...allTeams, ...yahooTeams];
+            }
+        }
 
-              const savedKey = Cookies.get('active_team_key');
-              const savedTeam = sortedTeams.find((t: Team) => t.team_key === savedKey);
+        // 2. Fetch ESPN Teams (New DB Table)
+        const { data: espnData } = await supabase
+            .from('leagues')
+            .select('*')
+            .eq('provider', 'ESPN');
+            
+        if (espnData) {
+            const espnTeams = espnData.map((l: any) => ({
+                team_key: l.team_key,
+                team_name: l.team_name,
+                league_key: l.league_key,
+                seasonYear: 2025, // Default to current
+               provider: 'ESPN' as const  // <--- ADD "as const" HERE
+            }));
+            allTeams = [...allTeams, ...espnTeams];
+        }
 
-              if (savedTeam) setActiveTeamState(savedTeam);
-              else {
-                setActiveTeamState(sortedTeams[0]);
-                Cookies.set('active_team_key', sortedTeams[0].team_key);
-                Cookies.set('active_league_key', sortedTeams[0].league_key);
-              }
+        // 3. Sort & Set Active
+        if (allTeams.length > 0) {
+            const sortedTeams = allTeams.sort((a, b) => b.seasonYear - a.seasonYear);
+            setTeams(sortedTeams);
+
+            const savedKey = Cookies.get('active_team_key');
+            const savedTeam = sortedTeams.find((t) => t.team_key === savedKey);
+
+            if (savedTeam) {
+                setActiveTeamState(savedTeam);
+                // Also restore provider so we know how to fetch roster later
+                if (typeof window !== 'undefined') localStorage.setItem('active_league_provider', savedTeam.provider);
+            } else {
+                const first = sortedTeams[0];
+                setActiveTeamState(first);
+                Cookies.set('active_team_key', first.team_key);
+                Cookies.set('active_league_key', first.league_key);
+                if (typeof window !== 'undefined') localStorage.setItem('active_league_provider', first.provider);
             }
         }
       } catch (error) {
@@ -54,13 +90,26 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
     fetchTeams();
   }, []);
 
-  const triggerSync = async (leagueKey: string) => {
+  const triggerSync = async (team: Team) => {
     try {
-      console.log("SYNC STARTED for:", leagueKey);
-      await fetch('/api/yahoo/sync-league', {
+      console.log(`SYNC STARTED for: ${team.league_key} (${team.provider})`);
+      
+      // We route to different endpoints based on provider
+      const endpoint = team.provider === 'ESPN' 
+        ? '/api/sync/espn-refresh' // We'll need a simple refresh endpoint for ESPN later
+        : '/api/yahoo/sync-league';
+
+      // For ESPN, we might just re-run the full sync if we stored the keys
+      if (team.provider === 'ESPN') {
+          // For now, simple alert as we haven't built the 'refresh' endpoint yet
+          alert("ESPN Auto-Sync happens on load. To force, re-enter keys in the modal.");
+          return; 
+      }
+
+      await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ league_key: leagueKey }),
+        body: JSON.stringify({ league_key: team.league_key }),
       });
       window.location.reload();
     } catch (err) {
@@ -72,13 +121,19 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
     setActiveTeamState(team);
     Cookies.set('active_team_key', team.team_key);
     Cookies.set('active_league_key', team.league_key);
-    // We do NOT auto-sync on switch anymore to save speed
+    
+    // Critical: Save provider so page.tsx knows which mode to use
+    if (typeof window !== 'undefined') {
+        localStorage.setItem('active_league_provider', team.provider);
+    }
+    
+    // We reload to force page.tsx to pick up the new provider/keys cleanly
+    window.location.reload(); 
   };
 
-  // The function the button will call
   const refreshLeague = async () => {
     if (activeTeam) {
-        await triggerSync(activeTeam.league_key);
+        await triggerSync(activeTeam);
     } else {
         alert("No active team found to sync.");
     }

@@ -30,7 +30,6 @@ import {
   getTools, 
   getTrajectory, 
   enrichPlayerData,
-  processEspnData, // <--- CHANGE 1: Added Import
   type DateRangeOption 
 } from "./utils/playerAnalysis";
 
@@ -479,8 +478,6 @@ export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [isUserPaid, setIsUserPaid] = useState(true); 
   const [savedFilters, setSavedFilters] = useState<any[]>([]);
-  // CHANGE 2: Added State for Roster Map
-  const [rosterMap, setRosterMap] = useState<{myTeamIds: string[], takenIds: string[]}>({ myTeamIds: [], takenIds: [] });
 
   // --- STATE: FILTERS (DEFAULT STATS SET HERE) ---
   const [openGroup, setOpenGroup] = useState<CoreId | "popular" | null>(null); 
@@ -608,13 +605,19 @@ export default function Home() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      
       if (activeTeam) {
           // PERSISTENCE FIX: Update local storage when we successfully use a team
           if(typeof window !== 'undefined') localStorage.setItem('active_team_id', activeTeam.team_key);
           
+          // Send BOTH IDs and provider. Backend will decide which table to check.
           params.append('league_id', activeTeam.league_key);
           params.append('team_id', activeTeam.team_key);
+          if (activeTeam.provider) {
+             params.append('provider', activeTeam.provider);
+          }
       }
+      
       if (search) params.append('search', search);
       if (dateRange !== 'custom') {
           const rangeValue = dateRange === 'pace_season' ? 'season_curr' : dateRange;
@@ -637,19 +640,6 @@ export default function Home() {
       const data = await response.json();
       const safeList = Array.isArray(data) ? data : (data.players || []);
       
-      // --- NEW: ESPN LOCAL STORAGE CHECK ---
-      if (typeof window !== 'undefined') {
-        const provider = localStorage.getItem('active_league_provider');
-        if (provider === 'ESPN') {
-           const rawEspn = localStorage.getItem('espn_raw_data');
-           if (rawEspn) {
-             const processed = processEspnData(JSON.parse(rawEspn), safeList, "My Team"); // Replace "My Team" with actual name later if needed
-             setRosterMap({ myTeamIds: processed.myTeamIds, takenIds: processed.takenIds });
-           }
-        }
-      }
-      // -------------------------------------
-
       setPlayers(safeList); 
       
     } catch (error) {
@@ -776,7 +766,7 @@ export default function Home() {
   // --- FILTERED DATA MEMO ---
   const filteredPlayers = useMemo(() => {
     // CHANGE 4: Passing rosterMap to enrichPlayerData
-    const scoredData = players.map((p: any) => enrichPlayerData(p, dateRange, rosterMap));
+    const scoredData = players.map((p: any) => enrichPlayerData(p, dateRange));
 
     return scoredData.filter((p: any) => {
     const hasPitchingStats = selectedStatKeys.some(k => PITCHER_STATS.includes(k));
@@ -832,7 +822,7 @@ export default function Home() {
       }
       return sortDir === "asc" ? valA - valB : valB - valA;
     });
-  }, [players, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange, rosterMap]); // Added rosterMap to deps
+  }, [players, selectedPositions, level, leagueStatus, selectedTeams, searchQuery, sortKey, sortDir, selectedStatKeys, statThresholds, minTools, dateRange]); // Added rosterMap to deps
 
 
   /* =============================================================================
@@ -935,9 +925,9 @@ export default function Home() {
                         <div style={{ display: "flex", gap: 6, flexWrap: 'wrap' }}>
                             {[
                                 { key: "all", label: "All" },
-                                { key: "available", label: "Free Agents" },    
-                                { key: "my_team", label: "My Team" },                            
-                                { key: "rostered", label: "Rostered" }         
+                                { key: "available", label: "Free Agents" },     
+                                { key: "my_team", label: "My Team" },                                   
+                                { key: "rostered", label: "Rostered" }          
                             ].map((opt) => { 
                                 const isLocked = !isUserPaid && opt.key !== "all"; 
                                 return (

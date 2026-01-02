@@ -1,83 +1,84 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@/app/utils/supabase/server';
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
+  const supabase = await createClient(); // Use server client (cookies auto-handled)
+  
   try {
-    // 1. Parse the incoming request body
-    const body = await request.json();
-    const { leagueId, espnS2, swid } = body;
+    const { leagueId, espnS2, swid } = await req.json();
+    
+    // 1. Authenticate User
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    // 2. Validate required fields
-    if (!leagueId) {
-      return NextResponse.json({ error: 'League ID is required' }, { status: 400 });
-    }
+    // 2. Fetch from ESPN (Verify keys work)
+    const cookiesStr = `swid=${swid}; espn_s2=${espnS2};`;
+    const espnUrl = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/seasons/2025/segments/0/leagues/${leagueId}?view=mRoster&view=mTeam`;
 
-    // 3. Configuration
-    // TODO: You might want to make this dynamic or an env variable in the future
-    const currentSeason = 2026; 
-
-    // 4. Construct the ESPN API URL
-    // We request specific "views" to get just the data we need:
-    // - mRoster: The actual players on each team
-    // - mTeam: Team names, logos, and owner info
-    // - mSettings: League name and size
-    const baseUrl = `https://fantasy.espn.com/apis/v3/games/flb/seasons/${currentSeason}/segments/0/leagues/${leagueId}`;
-    const params = new URLSearchParams({
-      view: ['mRoster', 'mTeam', 'mSettings', 'mStandings']
-    } as any);
-
-    const espnUrl = `${baseUrl}?${params.toString()}`;
-
-    // 5. Prepare Headers
-    // ESPN blocks requests without a valid User-Agent
-    const headers: HeadersInit = {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36',
-    };
-
-    // 6. Handle Private Leagues (Cookies)
-    if (espnS2 && swid) {
-      headers['Cookie'] = `espn_s2=${espnS2}; SWID=${swid};`;
-    }
-
-    // 7. Fetch from ESPN
-    console.log(`[ESPN Sync] Fetching: ${espnUrl}`);
-    const response = await fetch(espnUrl, { headers });
-
-    // 8. Handle Errors
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[ESPN Sync] Error ${response.status}:`, errorText);
-
-      if (response.status === 401) {
-        return NextResponse.json(
-          { error: 'Unauthorized. This league appears to be private. Please provide your espn_s2 and swid cookies.' }, 
-          { status: 401 }
-        );
-      }
-      if (response.status === 404) {
-        return NextResponse.json(
-          { error: 'League not found. Check the League ID and Season.' }, 
-          { status: 404 }
-        );
-      }
-      return NextResponse.json(
-        { error: `ESPN API Error: ${response.statusText}` }, 
-        { status: response.status }
-      );
-    }
-
-    const data = await response.json();
-
-    // 9. Return raw data (We will map this in the next step)
-    return NextResponse.json({
-      success: true,
-      data: data
+    const res = await fetch(espnUrl, {
+      headers: { Cookie: cookiesStr }
     });
 
+    if (!res.ok) {
+      return NextResponse.json({ error: 'Failed to connect to ESPN. Check League ID and Keys.' }, { status: 400 });
+    }
+
+    const data = await res.json();
+
+    // 3. Process Data
+    // Find "My Team" (Logic: For now, we take the first team or look for user match. 
+    // Since we don't know which is yours, we default to the first one or allow passing it in params.
+    // For MVP: We assume the user is the first team or just save the league.)
+    
+    // Better MVP: Save the league, and just assume Team ID 1 is "My Team" for now.
+    // Real implementation: We should filter `data.teams` to find the one owned by `swid` if possible, 
+    // but ESPN API doesn't always make that clear.
+    
+    const myTeam = data.teams[0]; // TODO: Add logic to pick correct team
+    const customTeamKey = `e.${leagueId}.${myTeam.id}`;
+
+    // 4. Save to 'leagues' table (The Settings)
+    const { error: leagueError } = await supabase.from('leagues').upsert({
+        user_id: user.id,
+        league_key: leagueId.toString(),
+        team_key: customTeamKey,
+        team_name: `${myTeam.location} ${myTeam.nickname} (ESPN)`,
+        provider: 'ESPN',
+        auth_config: { swid, espn_s2: espnS2 }
+    }, { onConflict: 'user_id, league_key' });
+
+    if (leagueError) throw leagueError;
+
+    // 5. Save Roster to 'league_rosters' (The Players)
+    // We clear old roster first
+    await supabase.from('league_rosters').delete().eq('league_key', leagueId.toString());
+
+    const allRosteredPlayers: any[] = [];
+    
+    data.teams.forEach((team: any) => {
+        const roster = team.roster?.entries || [];
+        roster.forEach((entry: any) => {
+            allRosteredPlayers.push({
+                league_key: leagueId.toString(),
+                team_key: `e.${leagueId}.${team.id}`,
+                yahoo_id: null, // It's ESPN
+                espn_id: entry.playerId.toString(),
+                player_name: entry.playerPoolEntry.player.fullName,
+                provider: 'ESPN',
+                updated_at: new Date()
+            });
+        });
+    });
+
+    if (allRosteredPlayers.length > 0) {
+        const { error: rosterError } = await supabase.from('league_rosters').insert(allRosteredPlayers);
+        if (rosterError) throw rosterError;
+    }
+
+    return NextResponse.json({ success: true, teamName: myTeam.nickname });
+
   } catch (error: any) {
-    console.error('[ESPN Sync] Internal Error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal Server Error' }, 
-      { status: 500 }
-    );
+    console.error("ESPN Sync Error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
