@@ -30,7 +30,7 @@ import {
   getTools, 
   getTrajectory, 
   enrichPlayerData,
-  processEspnData, // <--- IMPORT CONFIRMED
+  processEspnData, 
   type DateRangeOption 
 } from "./utils/playerAnalysis";
 
@@ -768,14 +768,25 @@ export default function Home() {
   const filteredPlayers = useMemo(() => {
     // FIX 2: Generate Roster Map correctly so "My Team" filter works
     let rosterMap = undefined;
+    
     if (activeTeam) {
+        // Name Fallback
         const at = activeTeam as any;
-        const teamName = at.name || 
+        const teamName = at.team_name || at.name || 
                          (at.location && at.nickname ? `${at.location} ${at.nickname}` : "My Team");
         
-        // CRITICAL FIX: The raw ESPN data is inside 'league_data', not at the top level
-        // We check for 'league_data' first. If not found, we fallback to 'activeTeam' (for Yahoo/Legacy)
-        const rawDataForProcessor = at.league_data ? at.league_data : at;
+        // CRITICAL FIX: Try 3 places for the data
+        // 1. The context (if loaded)
+        // 2. The raw object itself (if passed directly)
+        // 3. LocalStorage (Backup from the sync modal)
+        let rawDataForProcessor = at.league_data || at;
+        
+        if (!at.league_data && typeof window !== 'undefined') {
+             const stored = localStorage.getItem('espn_raw_data');
+             if (stored) {
+                 try { rawDataForProcessor = JSON.parse(stored); } catch (e) { console.error("Parse error", e); }
+             }
+        }
         
         rosterMap = processEspnData(rawDataForProcessor, players, teamName);
     }
@@ -1156,7 +1167,7 @@ export default function Home() {
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span className="nav-logo-text" style={{ fontWeight: 900, fontSize: '20px', color: '#fff', letterSpacing: '-0.5px', lineHeight: '1' }}>ROTO<span style={{ color: '#4caf50' }}>FILTER</span></span>
                 
-                {/* --- TEAM NAME WITH EDGY FONT --- */}
+                {/* --- FIX 3: TEAM NAME DISPLAY --- */}
                 {user && activeTeam ? (
                   <span style={{ 
                     color: '#FFD700', // Lightning Yellow
@@ -1167,8 +1178,9 @@ export default function Home() {
                     lineHeight: '1',
                     textShadow: '0 0 5px rgba(255, 215, 0, 0.4)'
                   }}>
-                    {/* Handles both 'name' and 'location + nickname' structures */}
-                    {(activeTeam as any).name || 
+                    {/* Check team_name first (Supabase default), then ESPN structure */}
+                    {(activeTeam as any).team_name || 
+                     (activeTeam as any).name || 
                      ((activeTeam as any).location && (activeTeam as any).nickname ? `${(activeTeam as any).location} ${(activeTeam as any).nickname}` : "My Team")}
                   </span>
                 ) : (
